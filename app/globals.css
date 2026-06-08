@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand palette: modern fintech. Deep navy ink + emerald/teal/cyan growth gradient */
+  --color-ink: #0a0f1c;
+  --color-ink-soft: #131a2a;
+  --color-ink-line: #1f2940;
+  --color-paper: #ffffff;
+  --color-paper-soft: #f6f9fc;
+  --color-paper-tint: #eef4f8;
+  --color-muted: #5b6573;
+  --color-muted-soft: #8a93a3;
+  --color-line: #e4e9f0;
+
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+
+  --color-teal-500: #14b8a6;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-400: #22d3ee;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Reusable brand utilities */
+@utility text-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-brand-400),
+    var(--color-teal-500) 45%,
+    var(--color-cyan-400)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-gradient-brand {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-brand-500),
+    var(--color-teal-500) 55%,
+    var(--color-cyan-500)
+  );
+}
+
+@utility ring-soft {
+  box-shadow: 0 1px 2px rgba(10, 15, 28, 0.04),
+    0 8px 24px -12px rgba(10, 15, 28, 0.12);
+}
+
+@utility ring-card {
+  box-shadow: 0 1px 0 rgba(10, 15, 28, 0.03),
+    0 1px 3px rgba(10, 15, 28, 0.06), 0 20px 40px -28px rgba(10, 15, 28, 0.22);
+}
+
+/* Subtle grid texture for dark sections */
+.grid-texture {
+  background-image: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.glow {
+  background: radial-gradient(
+    60% 60% at 50% 0%,
+    rgba(20, 184, 166, 0.22),
+    transparent 70%
+  );
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
