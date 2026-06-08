@@ -88,6 +88,16 @@ export function SiteFooter() {
                   LinkedIn
                 </a>
               </li>
+              <li>
+                <a
+                  href={site.founder.youtube}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-white/70 transition-colors hover:text-white"
+                >
+                  YouTube
+                </a>
+              </li>
             </ul>
           </div>
         </div>

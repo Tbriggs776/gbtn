@@ -17,6 +17,7 @@ const contactItems = [
   },
   { label: "Phone", value: site.founder.phone, href: site.founder.phoneHref },
   { label: "LinkedIn", value: "Connect with Tyler", href: site.founder.linkedin },
+  { label: "YouTube", value: "@Growthbythenumbers", href: site.founder.youtube },
   { label: "Based in", value: site.founder.location, href: null },
 ];
 

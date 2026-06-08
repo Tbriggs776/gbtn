@@ -18,6 +18,7 @@ export const site = {
     phone: "480.407.8503",
     phoneHref: "tel:+14804078503",
     linkedin: "https://www.linkedin.com/in/tylermarkbriggs",
+    youtube: "https://www.youtube.com/@Growthbythenumbers",
     calendly: "", // TODO: add scheduling link
   },
 } as const;
