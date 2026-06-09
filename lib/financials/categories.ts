@@ -52,7 +52,7 @@ const PL_RULES: [RegExp, string][] = [
   [/\b(depreciation|amortization|amortisation)\b/, "depreciation_amortization"],
   [/\binterest\b/, "interest"],
   [/\b(income tax|tax expense|taxes|provision for tax)\b/, "taxes"],
-  [/\b(cost of (goods|sales|revenue)|cogs|direct cost|materials?|subcontractor|job cost|labor cost|direct labor)\b/, "cogs"],
+  [/\b(cost of (goods|sales|revenue)|cogs|direct costs?|materials?|subcontractors?|sub-?contractors?|job costs?|labor costs?|direct labor|installation|equipment cost)\b/, "cogs"],
   [/\b(other income|interest income|gain on)\b/, "other_income"],
   [/\b(other expense|loss on)\b/, "other_expense"],
   [/\b(revenue|sales|income|fees earned|service income)\b/, "revenue"],

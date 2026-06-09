@@ -46,9 +46,17 @@ export default async function FinancialsPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("financial_line_items")
-      .select("statement_type, period_label, category, amount")
+      .select("statement_type, category, amount, upload_id")
       .eq("client_id", activeClient.id),
   ]);
+
+  // period_label / period_end live on the upload; map them onto line items.
+  const uploadMeta = new Map(
+    (uploads ?? []).map((u) => [
+      u.id,
+      { label: u.period_label, end: u.period_end as string | null },
+    ])
+  );
 
   const periodEndByLabel: Record<string, string | null> = {};
   for (const u of uploads ?? []) {
@@ -60,7 +68,7 @@ export default async function FinancialsPage({
   const periods = buildPeriods(
     (items ?? []).map((i) => ({
       statement_type: i.statement_type,
-      period_label: i.period_label,
+      period_label: uploadMeta.get(i.upload_id)?.label ?? "Unknown",
       category: i.category,
       amount: Number(i.amount),
     })),
