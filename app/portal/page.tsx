@@ -25,10 +25,17 @@ export default async function PortalHome({
 
   // Quick counts for the overview.
   const supabase = await createClient();
-  const { count: docCount } = await supabase
-    .from("documents")
-    .select("*", { count: "exact", head: true })
-    .eq("client_id", activeClient.id);
+  const [{ count: docCount }, { count: stmtCount }] = await Promise.all([
+    supabase
+      .from("documents")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", activeClient.id),
+    supabase
+      .from("financial_uploads")
+      .select("*", { count: "exact", head: true })
+      .eq("client_id", activeClient.id)
+      .eq("status", "confirmed"),
+  ]);
 
   const firstName = session?.profile?.full_name?.split(" ")[0] ?? "there";
 
@@ -43,9 +50,12 @@ export default async function PortalHome({
     {
       href: `/portal/financials?client=${activeClient.id}`,
       title: "Financials",
-      stat: "Soon",
-      label: "dashboards",
-      body: "Upload your P&L and Balance Sheet to unlock dashboards.",
+      stat: `${stmtCount ?? 0}`,
+      label: stmtCount === 1 ? "statement" : "statements",
+      body:
+        (stmtCount ?? 0) > 0
+          ? "View your dashboards and top areas for improvement."
+          : "Upload your P&L and Balance Sheet to unlock dashboards.",
     },
   ];
 
