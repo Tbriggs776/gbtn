@@ -7,30 +7,20 @@ import { Button } from "./ui";
 
 function Logo() {
   return (
-    <Link href="/" className="group flex items-center gap-2.5">
-      <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-brand text-white ring-soft">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
-          <path
-            d="M4 16.5l4.5-5 3.5 3.5L20 7"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M15 7h5v5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
+    <Link href="/" className="group flex items-center gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/logo/mark-navy-cream.svg"
+        alt=""
+        width={40}
+        height={40}
+        className="h-10 w-10"
+      />
       <span className="flex flex-col leading-none">
-        <span className="text-[15px] font-bold tracking-tight text-ink">
+        <span className="font-label text-[15px] font-semibold uppercase tracking-[0.1em] text-navy-2">
           Growth by the Numbers
         </span>
-        <span className="text-[11px] font-medium tracking-wide text-muted-soft">
+        <span className="font-label mt-1 text-[10px] font-medium uppercase tracking-[0.2em] text-crimson">
           Fractional CFO &amp; Value Creation
         </span>
       </span>

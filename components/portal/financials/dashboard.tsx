@@ -91,21 +91,21 @@ export function FinancialDashboard({
           <div className="mt-4 h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid stroke="#e4e9f0" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#5b6573" }} tickLine={false} axisLine={{ stroke: "#e4e9f0" }} />
-                <YAxis yAxisId="rev" tick={{ fontSize: 12, fill: "#5b6573" }} tickLine={false} axisLine={false} tickFormatter={(v) => money(v)} width={60} />
-                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 12, fill: "#5b6573" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} width={44} />
+                <CartesianGrid stroke="#e7e0d3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#5a606b" }} tickLine={false} axisLine={{ stroke: "#e7e0d3" }} />
+                <YAxis yAxisId="rev" tick={{ fontSize: 12, fill: "#5a606b" }} tickLine={false} axisLine={false} tickFormatter={(v) => money(v)} width={60} />
+                <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 12, fill: "#5a606b" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}%`} width={44} />
                 <Tooltip
                   formatter={(value: unknown, name: unknown) =>
                     name === "Revenue"
                       ? money(Number(value))
                       : percent(Number(value))
                   }
-                  contentStyle={{ borderRadius: 12, border: "1px solid #e4e9f0", fontSize: 13 }}
+                  contentStyle={{ borderRadius: 6, border: "1px solid #e7e0d3", fontSize: 13 }}
                 />
-                <Bar yAxisId="rev" dataKey="revenue" name="Revenue" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={56} />
-                <Line yAxisId="pct" dataKey="grossMargin" name="Gross Margin" stroke="#0a0f1c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                <Line yAxisId="pct" dataKey="ebitdaMargin" name="EBITDA Margin" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Bar yAxisId="rev" dataKey="revenue" name="Revenue" fill="#16335b" radius={[4, 4, 0, 0]} maxBarSize={56} />
+                <Line yAxisId="pct" dataKey="grossMargin" name="Gross Margin" stroke="#9e2335" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                <Line yAxisId="pct" dataKey="ebitdaMargin" name="EBITDA Margin" stroke="#9a958c" strokeWidth={2} dot={{ r: 3 }} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>

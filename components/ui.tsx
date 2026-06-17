@@ -33,8 +33,8 @@ export function Section({
 
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand-600">
-      <span className="h-1.5 w-1.5 rounded-full bg-gradient-brand" />
+    <span className="font-label inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-crimson">
+      <span className="h-px w-8 bg-crimson" />
       {children}
     </span>
   );
@@ -52,16 +52,16 @@ export function Button({
   className?: string;
 }) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2";
+    "font-label inline-flex items-center justify-center gap-2 rounded-md px-6 py-3 text-xs font-semibold uppercase tracking-[0.14em] transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-crimson focus-visible:ring-offset-2";
   const variants: Record<string, string> = {
     primary:
-      "bg-gradient-brand text-white ring-soft hover:brightness-110 hover:-translate-y-0.5",
+      "bg-gradient-brand text-cream ring-soft hover:brightness-110 hover:-translate-y-0.5",
     secondary:
-      "bg-ink text-white hover:bg-ink-soft hover:-translate-y-0.5",
+      "bg-crimson text-cream hover:brightness-110 hover:-translate-y-0.5",
     ghost:
-      "text-ink border border-line hover:border-brand-400 hover:text-brand-700 bg-white",
+      "text-ink border border-stone hover:border-navy-2 hover:text-navy-2 bg-white",
     light:
-      "bg-white/10 text-white border border-white/15 backdrop-blur hover:bg-white/15",
+      "bg-white/10 text-cream border border-white/20 backdrop-blur hover:bg-white/15",
   };
   return (
     <Link href={href} className={`${base} ${variants[variant]} ${className}`}>
@@ -128,8 +128,8 @@ export function SectionHeading({
     >
       {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
       <h2
-        className={`mt-4 text-balance text-3xl font-bold tracking-tight sm:text-4xl ${
-          dark ? "text-white" : "text-ink"
+        className={`mt-5 text-balance text-3xl font-semibold leading-[1.12] sm:text-[2.6rem] ${
+          dark ? "text-cream" : "text-navy-2"
         }`}
       >
         {title}
@@ -137,7 +137,7 @@ export function SectionHeading({
       {intro ? (
         <p
           className={`mt-4 text-lg leading-relaxed ${
-            dark ? "text-white/70" : "text-muted"
+            dark ? "text-cream/70" : "text-muted"
           }`}
         >
           {intro}
@@ -156,7 +156,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-line bg-white p-7 ring-card ${className}`}
+      className={`rounded-lg border border-line bg-white p-7 ring-card ${className}`}
     >
       {children}
     </div>

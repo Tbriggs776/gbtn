@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Oswald, Spectral } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { site } from "@/lib/site";
 
-const inter = Inter({
+// Oswald — condensed display for the wordmark, labels, and numerals.
+const oswald = Oswald({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-oswald",
+});
+
+// Spectral — literary serif for headings and body.
+const spectral = Spectral({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  display: "swap",
+  variable: "--font-spectral",
 });
 
 export const metadata: Metadata = {
@@ -35,12 +46,14 @@ export const metadata: Metadata = {
     url: site.url,
     siteName: site.name,
     type: "website",
+    images: ["/brand/social/og-card-1200x630.png"],
   },
   twitter: {
     card: "summary_large_image",
     title: `${site.name} · Fractional CFO & Value Creation`,
     description:
       "Operator-grade fractional CFO. The PE value-creation playbook, applied to your business.",
+    images: ["/brand/social/og-card-1200x630.png"],
   },
 };
 
@@ -50,7 +63,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${oswald.variable} ${spectral.variable}`}>
       <body className="min-h-screen antialiased">
         {children}
         <Analytics />

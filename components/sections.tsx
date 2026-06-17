@@ -4,25 +4,25 @@ import { Container, Button, Arrow, Eyebrow } from "./ui";
 export function StatBar({ dark = false }: { dark?: boolean }) {
   return (
     <div
-      className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl lg:grid-cols-3 ${
+      className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg lg:grid-cols-3 ${
         dark ? "bg-white/10 ring-1 ring-white/10" : "bg-line ring-1 ring-line"
       }`}
     >
       {stats.map((s) => (
         <div
           key={s.label}
-          className={`flex flex-col gap-1 p-6 ${dark ? "bg-ink" : "bg-white"}`}
+          className={`flex flex-col gap-1.5 p-6 ${dark ? "bg-navy" : "bg-white"}`}
         >
           <div
-            className={`text-2xl font-bold tracking-tight sm:text-3xl ${
-              dark ? "text-white" : "text-ink"
+            className={`font-label text-2xl font-semibold sm:text-3xl ${
+              dark ? "text-cream" : "text-crimson"
             }`}
           >
-            <span className="text-gradient">{s.value}</span>
+            {s.value}
           </div>
           <div
             className={`text-sm leading-snug ${
-              dark ? "text-white/60" : "text-muted"
+              dark ? "text-cream/55" : "text-muted"
             }`}
           >
             {s.label}

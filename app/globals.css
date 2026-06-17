@@ -1,37 +1,54 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand palette: modern fintech. Deep navy ink + emerald/teal/cyan growth gradient */
-  --color-ink: #0a0f1c;
-  --color-ink-soft: #131a2a;
-  --color-ink-line: #1f2940;
-  --color-paper: #ffffff;
-  --color-paper-soft: #f6f9fc;
-  --color-paper-tint: #eef4f8;
-  --color-muted: #5b6573;
-  --color-muted-soft: #8a93a3;
-  --color-line: #e4e9f0;
+  /* ── Tyler M Briggs Inc heritage palette (GBTN re-skin) ──────────────────
+     Navy leads. Crimson signs, sparingly. Cream + stone breathe. */
+  --color-navy: #11294a; /* primary dark / backgrounds */
+  --color-navy-2: #16335b; /* headings on light */
+  --color-crimson: #9e2335; /* accent — rules, emphasis (sparingly) */
+  --color-crimson-bright: #b31942;
+  --color-rose: #c98a92; /* muted accent on dark */
+  --color-cream: #f6f2ea; /* paper / light surface */
+  --color-cream-2: #fbf8f2; /* alt surface */
+  --color-stone: #c0b7a6; /* taupe — dividers, captions */
+  --color-paper-ink: #1b1d24; /* body text */
 
-  --color-brand-50: #ecfdf5;
-  --color-brand-100: #d1fae5;
-  --color-brand-200: #a7f3d0;
-  --color-brand-300: #6ee7b7;
-  --color-brand-400: #34d399;
-  --color-brand-500: #10b981;
-  --color-brand-600: #059669;
-  --color-brand-700: #047857;
-  --color-brand-800: #065f46;
+  /* ── Back-compat token names (remapped to the heritage palette) so the
+     existing components recolor without a full rewrite ──────────────────── */
+  --color-ink: #11294a; /* dark sections + headings (navy) */
+  --color-ink-soft: #16335b;
+  --color-ink-line: #24416b;
+  --color-paper: #ffffff; /* cards */
+  --color-paper-soft: #fbf8f2; /* alternating sections (cream) */
+  --color-paper-tint: #f1ecdf;
+  --color-muted: #5a606b;
+  --color-muted-soft: #9a958c;
+  --color-line: #e7e0d3; /* stone hairline borders */
 
-  --color-teal-500: #14b8a6;
-  --color-cyan-500: #06b6d4;
-  --color-cyan-400: #22d3ee;
+  /* "brand" scale → NAVY (navy is the dominant accent; crimson used by hand) */
+  --color-brand-50: #eaf0f7;
+  --color-brand-100: #d6e1ef;
+  --color-brand-200: #b7c8e1;
+  --color-brand-300: #8ea8cb;
+  --color-brand-400: #5b7aa6;
+  --color-brand-500: #2f527f;
+  --color-brand-600: #1f4070;
+  --color-brand-700: #16335b;
+  --color-brand-800: #11294a;
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
+  /* crimson/rose aliases for any lingering accent references */
+  --color-teal-500: #9e2335;
+  --color-cyan-500: #b31942;
+  --color-cyan-400: #c98a92;
 
-  --radius-xl: 1rem;
-  --radius-2xl: 1.25rem;
-  --radius-3xl: 1.75rem;
+  /* Type: Spectral (serif body/headings) + Oswald (condensed labels/wordmark) */
+  --font-sans: var(--font-spectral), Georgia, "Times New Roman", serif;
+  --font-spectral: var(--font-spectral), Georgia, serif;
+  --font-label: var(--font-oswald), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.875rem;
 }
 
 :root {
@@ -43,62 +60,77 @@ html {
 }
 
 body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
+  background: var(--color-cream);
+  color: var(--color-paper-ink);
+  font-family: var(--font-spectral), Georgia, serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Reusable brand utilities */
-@utility text-gradient {
-  background-image: linear-gradient(
-    100deg,
-    var(--color-brand-400),
-    var(--color-teal-500) 45%,
-    var(--color-cyan-400)
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+::selection {
+  background: #16335b;
+  color: #f6f2ea;
 }
 
+/* ── Brand utilities (names preserved; heritage values) ───────────────────── */
+
+/* Solid navy "gradient" — subtle depth, no rainbow. */
 @utility bg-gradient-brand {
-  background-image: linear-gradient(
-    100deg,
-    var(--color-brand-500),
-    var(--color-teal-500) 55%,
-    var(--color-cyan-500)
-  );
+  background-image: linear-gradient(180deg, #16335b, #11294a);
+}
+
+/* Emphasis text → crimson, the signature ledger accent. */
+@utility text-gradient {
+  color: var(--color-crimson);
+  -webkit-text-fill-color: var(--color-crimson);
+}
+
+/* Cream emphasis for use on navy backgrounds (hero words, etc.). */
+@utility text-emphasis-cream {
+  color: #f3efe7;
 }
 
 @utility ring-soft {
-  box-shadow: 0 1px 2px rgba(10, 15, 28, 0.04),
-    0 8px 24px -12px rgba(10, 15, 28, 0.12);
+  box-shadow: 0 1px 2px rgba(17, 41, 74, 0.05),
+    0 8px 24px -14px rgba(17, 41, 74, 0.18);
 }
 
 @utility ring-card {
-  box-shadow: 0 1px 0 rgba(10, 15, 28, 0.03),
-    0 1px 3px rgba(10, 15, 28, 0.06), 0 20px 40px -28px rgba(10, 15, 28, 0.22);
+  box-shadow: 0 1px 0 rgba(17, 41, 74, 0.03),
+    0 1px 3px rgba(17, 41, 74, 0.06), 0 22px 44px -30px rgba(17, 41, 74, 0.28);
 }
 
-/* Subtle grid texture for dark sections */
+/* Oswald label helper — uppercase, letter-spaced (the brand's label voice). */
+@utility font-label {
+  font-family: var(--font-oswald), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Engraved grid texture for dark navy sections. */
 .grid-texture {
   background-image: linear-gradient(
       to right,
-      rgba(255, 255, 255, 0.04) 1px,
+      rgba(243, 239, 231, 0.05) 1px,
       transparent 1px
     ),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(to bottom, rgba(243, 239, 231, 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
 }
 
+/* Subtle navy vignette (replaces the old teal glow). */
 .glow {
   background: radial-gradient(
     60% 60% at 50% 0%,
-    rgba(20, 184, 166, 0.22),
+    rgba(22, 51, 91, 0.55),
     transparent 70%
   );
+}
+
+/* Thin inset keyline frame — the banknote border motif. */
+.keyline {
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(200, 193, 182, 0.28);
+  pointer-events: none;
 }
 
 @keyframes fade-up {
