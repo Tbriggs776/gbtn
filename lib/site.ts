@@ -193,7 +193,7 @@ export const trackRecord = [
       "Led 10+ M&A transactions from diligence through post-close integration, exceeding pro-forma targets on every deal.",
       "Built and ran the finance function from scratch: FP&A, board-grade reporting, KPI dashboards, SOPs, and a weekly operating cadence.",
       "Directed a multi-entity $100M+ P&L and a 50+ person finance, operations, and technology team inside a 300+ FTE organization.",
-      "Implemented ServiceTitan, Power BI, and Yardi Voyager, cutting reporting cycle times by roughly 30%.",
+      "Implemented ServiceTitan and Power BI, cutting reporting cycle times by roughly 30%.",
       "Negotiated banking, insurance, and vendor terms for $2M+ in annual savings, and partnered with the board and PE sponsor on capital allocation and exit planning.",
     ],
   },
@@ -204,9 +204,9 @@ export const trackRecord = [
     backer: "Audax Private Equity",
     sector: "Healthcare Platform",
     highlight:
-      "Drove financial integration across a fast-acquiring, PE-backed nephrology platform.",
+      "Drove financial integration inside a $450M, Audax-backed nephrology platform spanning 3,400+ employees nationwide and acquiring $20-30M of add-on practices every month.",
     points: [
-      "Integrated 5+ simultaneous practice acquisitions inside 12 months, coordinating data migration and systems setup on tight schedules.",
+      "Integrated a continuous pipeline of add-on acquisitions, multiple practices in parallel, coordinating data migration and systems setup on tight schedules.",
       "Built KPI frameworks and post-integration assessments that cut variance roughly 20%.",
       "Partnered with Finance & Accounting and the Integration Management Office, leading a 15+ person cross-functional team.",
     ],
