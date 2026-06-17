@@ -190,7 +190,7 @@ export const trackRecord = [
     highlight:
       "Scaled the platform from ~$30M to $100M+ in revenue in three years while driving 18% annualized EBITDA growth.",
     points: [
-      "Led 10+ M&A transactions from diligence through post-close integration, exceeding pro-forma targets on every deal.",
+      "Led M&A strategy and executed the company's strategic acquisition end to end, from diligence through post-close integration.",
       "Built and ran the finance function from scratch: FP&A, board-grade reporting, KPI dashboards, SOPs, and a weekly operating cadence.",
       "Directed a multi-entity $100M+ P&L and a 50+ person finance, operations, and technology team inside a 300+ FTE organization.",
       "Implemented ServiceTitan and Power BI, cutting reporting cycle times by roughly 30%.",
@@ -206,7 +206,7 @@ export const trackRecord = [
     highlight:
       "Drove financial integration inside a $450M, Audax-backed nephrology platform spanning 3,400+ employees nationwide and acquiring $20-30M of add-on practices every month.",
     points: [
-      "Integrated a continuous pipeline of add-on acquisitions, multiple practices in parallel, coordinating data migration and systems setup on tight schedules.",
+      "Integrated the platform's add-on pipeline at a pace of roughly four practice acquisitions per month, coordinating data migration and systems setup on tight schedules.",
       "Built KPI frameworks and post-integration assessments that cut variance roughly 20%.",
       "Partnered with Finance & Accounting and the Integration Management Office, leading a 15+ person cross-functional team.",
     ],
