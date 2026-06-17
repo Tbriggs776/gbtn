@@ -190,10 +190,11 @@ export const trackRecord = [
     highlight:
       "Scaled the platform from ~$30M to $100M+ in revenue in three years while driving 18% annualized EBITDA growth.",
     points: [
-      "Led 10+ M&A transactions from diligence through post-close integration, exceeding pro-forma targets.",
-      "Built the finance function from the ground up: FP&A, KPI dashboards, SOPs, and operating cadence.",
-      "Negotiated banking, insurance, and vendor terms for $2M+ in annual savings.",
-      "Partnered directly with the board and PE sponsor on capital allocation and exit planning.",
+      "Led 10+ M&A transactions from diligence through post-close integration, exceeding pro-forma targets on every deal.",
+      "Built and ran the finance function from scratch: FP&A, board-grade reporting, KPI dashboards, SOPs, and a weekly operating cadence.",
+      "Directed a multi-entity $100M+ P&L and a 50+ person finance, operations, and technology team inside a 300+ FTE organization.",
+      "Implemented ServiceTitan, Power BI, and Yardi Voyager, cutting reporting cycle times by roughly 30%.",
+      "Negotiated banking, insurance, and vendor terms for $2M+ in annual savings, and partnered with the board and PE sponsor on capital allocation and exit planning.",
     ],
   },
   {
@@ -205,9 +206,9 @@ export const trackRecord = [
     highlight:
       "Drove financial integration across a fast-acquiring, PE-backed nephrology platform.",
     points: [
-      "Integrated 5+ simultaneous practice acquisitions inside 12 months.",
-      "Built KPI frameworks and dashboards that cut post-integration variance ~20%.",
-      "Served as a key execution partner to platform leadership during rapid roll-up activity.",
+      "Integrated 5+ simultaneous practice acquisitions inside 12 months, coordinating data migration and systems setup on tight schedules.",
+      "Built KPI frameworks and post-integration assessments that cut variance roughly 20%.",
+      "Partnered with Finance & Accounting and the Integration Management Office, leading a 15+ person cross-functional team.",
     ],
   },
   {
@@ -219,8 +220,9 @@ export const trackRecord = [
     highlight:
       "Operated inside one of the original iBuyer platforms at national scale.",
     points: [
-      "Built national holding procedures for 500+ properties per month.",
-      "Partnered with PE leadership to sharpen acquisition modeling and decision support.",
+      "Built national holding procedures and managed renovation scheduling for 500+ homes, with ~250 cycling per month.",
+      "Modeled customer-acquisition cost and daily holding costs across MSAs, sharpening unit-economics visibility.",
+      "Partnered with PE leadership on the financial models behind investment-committee decisions.",
     ],
   },
   {
@@ -232,8 +234,9 @@ export const trackRecord = [
     highlight:
       "Cut my teeth on the capital side: REIT accounting and fund structuring.",
     points: [
-      "Supported capital raises exceeding $100M and $50M+ in new investor commitments.",
-      "Developed underwriting criteria and acquisition models aligned to fund return targets.",
+      "Built pro-forma models and pitch materials supporting raises of $100M+, and contributed to $50M+ funded into the platform.",
+      "Developed underwriting criteria and acquisition and liquidation models aligned to fund return targets.",
+      "Worked directly alongside the founder and senior leadership on investor communications.",
     ],
   },
   {
@@ -245,8 +248,9 @@ export const trackRecord = [
     highlight:
       "Founded an advisory practice, the forerunner to Growth by the Numbers.",
     points: [
-      "Delivered accounting, FP&A, and fund structuring across $200M+ in aggregate deal value.",
-      "Advised ownership teams on acquisition modeling, capital raising, and performance tracking.",
+      "Advised 15+ clients across real estate funds and mid-market operating companies on accounting, FP&A, and capital structuring.",
+      "Built acquisition models across $200M+ in aggregate deal value and supported nationwide deal pipelines.",
+      "Structured GP/LP funds and SPVs and ran property accounting for 200+ doors.",
     ],
   },
 ] as const;
