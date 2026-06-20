@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth";
+import { requireSession, requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { parseWorkbook } from "@/lib/financials/parse";
+import { parseMrp } from "@/lib/financials/mrp";
 import {
   guessCategory,
   normalizeLabel,
@@ -187,6 +188,87 @@ export async function confirmUploadAction(
   revalidatePath("/portal/financials");
   revalidatePath("/portal");
   return { ok: true };
+}
+
+// Admin-only: parse an uploaded MRP workbook (DATA-PL / DATA-BS tabs) and
+// reload the active client's financials in one pass. Replaces existing data.
+export type MrpState = { ok?: boolean; error?: string; message?: string };
+
+export async function loadMrpAction(
+  _prev: MrpState,
+  formData: FormData
+): Promise<MrpState> {
+  const session = await requireAdmin();
+  const clientId = String(formData.get("clientId") ?? "");
+  const year = Number(formData.get("year") ?? 0);
+  const file = formData.get("file");
+
+  if (!z.string().uuid().safeParse(clientId).success)
+    return { error: "Pick a client first." };
+  if (!Number.isInteger(year) || year < 2000 || year > 2100)
+    return { error: "Enter a valid year." };
+  if (!(file instanceof File) || file.size === 0)
+    return { error: "Choose an MRP workbook to upload." };
+
+  let result;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    result = parseMrp(buffer, year);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not parse the workbook." };
+  }
+
+  const supabase = await createClient();
+  // Clean reload: the MRP is the source of truth for the dashboard.
+  await supabase.from("financial_uploads").delete().eq("client_id", clientId);
+
+  let statements = 0;
+  for (const p of result.periods) {
+    for (const [type, items] of [
+      ["pl", p.pl],
+      ["bs", p.bs],
+    ] as const) {
+      if (items.length === 0) continue;
+      const { data: up, error: ue } = await supabase
+        .from("financial_uploads")
+        .insert({
+          client_id: clientId,
+          uploaded_by: session.user.id,
+          statement_type: type,
+          period_label: p.label,
+          period_end: p.end,
+          file_name: `MRP ${type.toUpperCase()} (${p.label})`,
+          status: "confirmed",
+        })
+        .select("id")
+        .single();
+      if (ue || !up) return { error: ue?.message ?? "Could not record statement." };
+      const { error: le } = await supabase.from("financial_line_items").insert(
+        items.map((it, i) => ({
+          upload_id: up.id,
+          client_id: clientId,
+          statement_type: type,
+          raw_label: it.rawLabel,
+          category: it.category,
+          amount: it.amount,
+          sort_order: i,
+        }))
+      );
+      if (le) return { error: le.message };
+      statements++;
+    }
+  }
+
+  revalidatePath("/portal/financials");
+  revalidatePath("/portal");
+  return {
+    ok: true,
+    message: `Loaded ${result.periods.length} month${
+      result.periods.length === 1 ? "" : "s"
+    } (${statements} statements).${
+      result.warnings.length ? " " + result.warnings.join(" ") : ""
+    }`,
+  };
 }
 
 export async function deleteUploadAction(

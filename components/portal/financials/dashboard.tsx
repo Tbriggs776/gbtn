@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -11,8 +12,8 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { Period } from "@/lib/financials/metrics";
-import { money, percent, ratio } from "@/lib/financials/metrics";
-import type { Finding, Severity } from "@/lib/financials/analysis";
+import { aggregatePL, money, percent, ratio } from "@/lib/financials/metrics";
+import { analyze, type Finding, type Severity } from "@/lib/financials/analysis";
 
 const SEV_STYLES: Record<Severity, { dot: string; ring: string; chip: string }> = {
   critical: { dot: "bg-red-500", ring: "border-red-200", chip: "bg-red-50 text-red-700" },
@@ -20,15 +21,9 @@ const SEV_STYLES: Record<Severity, { dot: string; ring: string; chip: string }> 
   good: { dot: "bg-brand-500", ring: "border-brand-200", chip: "bg-brand-50 text-brand-700" },
 };
 
-function Kpi({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
+type RangeKind = "ytd" | "last" | "custom";
+
+function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">
@@ -42,20 +37,77 @@ function Kpi({
   );
 }
 
-export function FinancialDashboard({
-  periods,
-  findings,
-}: {
-  periods: Period[];
-  findings: Finding[];
-}) {
-  const latest = periods[periods.length - 1];
-  const pl = latest?.pl;
-  const bs = latest?.bs;
+// A P&L aggregated over [start..end] of the monthly periods, with a balance
+// sheet snapshot from the last month in range — shaped like a single Period so
+// the existing analyze() engine works unchanged.
+function rangePeriod(periods: Period[], start: number, end: number): Period {
+  const slice = periods.slice(start, end + 1);
+  const pls = slice.map((p) => p.pl).filter((p): p is NonNullable<typeof p> => p != null);
+  const lastBs = [...slice].reverse().find((p) => p.bs != null)?.bs ?? null;
+  const first = slice[0];
+  const last = slice[slice.length - 1];
+  const label =
+    slice.length <= 1
+      ? last?.label ?? ""
+      : `${first.label} – ${last.label}`;
+  return {
+    label,
+    periodEnd: last?.periodEnd ?? null,
+    pl: aggregatePL(pls),
+    bs: lastBs,
+  };
+}
 
+export function FinancialDashboard({ periods }: { periods: Period[] }) {
+  const n = periods.length;
+  const lastIdx = n - 1;
+
+  // Year of the most recent period drives the YTD window.
+  const latestYear = useMemo(() => {
+    const end = periods[lastIdx]?.periodEnd;
+    return end ? end.slice(0, 4) : null;
+  }, [periods, lastIdx]);
+
+  const ytdStart = useMemo(() => {
+    if (latestYear == null) return 0;
+    const i = periods.findIndex((p) => (p.periodEnd ?? "").slice(0, 4) === latestYear);
+    return i < 0 ? 0 : i;
+  }, [periods, latestYear]);
+
+  const [kind, setKind] = useState<RangeKind>("ytd");
+  const [fromIdx, setFromIdx] = useState(ytdStart);
+  const [toIdx, setToIdx] = useState(lastIdx);
+
+  // Resolve the selected window to [start, end] indices.
+  const [start, end] =
+    kind === "last"
+      ? [lastIdx, lastIdx]
+      : kind === "ytd"
+        ? [ytdStart, lastIdx]
+        : [Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx)];
+
+  const current = useMemo(
+    () => rangePeriod(periods, start, end),
+    [periods, start, end]
+  );
+
+  // A prior window of equal length for trend findings (revenue/GM movement).
+  const findings: Finding[] = useMemo(() => {
+    const len = end - start + 1;
+    const prevEnd = start - 1;
+    const prevStart = prevEnd - len + 1;
+    const series: Period[] = [];
+    if (prevEnd >= 0) series.push(rangePeriod(periods, Math.max(0, prevStart), prevEnd));
+    series.push(current);
+    return analyze(series);
+  }, [periods, start, end, current]);
+
+  const pl = current.pl;
+  const bs = current.bs;
   const improvements = findings.filter((f) => f.severity !== "good");
   const strengths = findings.filter((f) => f.severity === "good");
 
+  // The trend chart always shows the full monthly history for context.
   const chartData = periods.map((p) => ({
     label: p.label,
     revenue: p.pl?.revenue ?? null,
@@ -64,13 +116,72 @@ export function FinancialDashboard({
   }));
   const hasPlSeries = chartData.some((d) => d.revenue != null);
 
+  const segBtn = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+      active ? "bg-ink text-cream" : "text-muted hover:text-ink"
+    }`;
+  const selectCls =
+    "rounded-md border border-line bg-white px-2.5 py-1.5 text-xs font-medium text-ink focus:border-navy-2 focus:outline-none focus:ring-2 focus:ring-brand-100";
+
   return (
     <div className="space-y-8">
+      {/* Range selector */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">
+            Showing
+          </p>
+          <p className="text-sm font-bold text-ink">{current.label || "—"}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-lg border border-line bg-white p-1 ring-soft">
+            <button onClick={() => setKind("ytd")} className={segBtn(kind === "ytd")}>
+              YTD
+            </button>
+            <button onClick={() => setKind("last")} className={segBtn(kind === "last")}>
+              Last month
+            </button>
+            <button onClick={() => setKind("custom")} className={segBtn(kind === "custom")}>
+              Custom
+            </button>
+          </div>
+          {kind === "custom" && (
+            <div className="flex items-center gap-2">
+              <select
+                value={fromIdx}
+                onChange={(e) => setFromIdx(Number(e.target.value))}
+                className={selectCls}
+                aria-label="From month"
+              >
+                {periods.map((p, i) => (
+                  <option key={p.label} value={i}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-muted-soft">to</span>
+              <select
+                value={toIdx}
+                onChange={(e) => setToIdx(Number(e.target.value))}
+                className={selectCls}
+                aria-label="To month"
+              >
+                {periods.map((p, i) => (
+                  <option key={p.label} value={i}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* KPI row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {pl && (
           <>
-            <Kpi label="Revenue" value={money(pl.revenue)} sub={`Latest: ${latest.label}`} />
+            <Kpi label="Revenue" value={money(pl.revenue)} sub={current.label} />
             <Kpi label="Gross Margin" value={percent(pl.grossMargin)} sub={`Gross profit ${money(pl.grossProfit)}`} />
             <Kpi label="EBITDA Margin" value={percent(pl.ebitdaMargin)} sub={`EBITDA ${money(pl.ebitda)}`} />
           </>
@@ -119,8 +230,8 @@ export function FinancialDashboard({
         </h3>
         {improvements.length === 0 ? (
           <p className="mt-3 rounded-2xl border border-brand-200 bg-brand-50/50 p-5 text-sm text-ink/80">
-            Nothing flagged against our benchmarks — the numbers look healthy. Keep
-            the cadence and protect what&apos;s working.
+            Nothing flagged against our benchmarks for {current.label || "this range"} —
+            the numbers look healthy. Keep the cadence and protect what&apos;s working.
           </p>
         ) : (
           <div className="mt-4 grid gap-4 md:grid-cols-2">

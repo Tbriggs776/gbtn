@@ -87,6 +87,38 @@ export function computePL(items: LineItem[]): PLMetrics {
   };
 }
 
+// Combine several months of P&L flows into one period (e.g. YTD or a custom
+// range). Additive lines sum; ratio lines are recomputed off the summed totals.
+export function aggregatePL(months: PLMetrics[]): PLMetrics | null {
+  if (months.length === 0) return null;
+  if (months.length === 1) return months[0];
+
+  const add = (key: keyof PLMetrics) =>
+    months.reduce((t, m) => t + (m[key] as number), 0);
+
+  const revenue = add("revenue");
+  const grossProfit = add("grossProfit");
+  const ebitda = add("ebitda");
+  const opex = add("opex");
+
+  return {
+    revenue,
+    cogs: add("cogs"),
+    grossProfit,
+    grossMargin: pct(grossProfit, revenue),
+    opex,
+    da: add("da"),
+    ebitda,
+    ebitdaMargin: pct(ebitda, revenue),
+    interest: add("interest"),
+    taxes: add("taxes"),
+    otherIncome: add("otherIncome"),
+    otherExpense: add("otherExpense"),
+    netIncome: add("netIncome"),
+    opexRatio: pct(opex, revenue),
+  };
+}
+
 export function computeBS(items: LineItem[]): BSMetrics {
   const cash = sum(items, "cash");
   const ar = sum(items, "accounts_receivable");

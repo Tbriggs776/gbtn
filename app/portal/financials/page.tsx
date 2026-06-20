@@ -7,13 +7,13 @@ import {
   NoClientState,
 } from "@/components/portal/ui";
 import { FinancialUploader } from "@/components/portal/financials/uploader";
+import { MrpUploader } from "@/components/portal/financials/mrp-uploader";
 import { FinancialDashboard } from "@/components/portal/financials/dashboard";
 import {
   StatementsList,
   type StatementRow,
 } from "@/components/portal/financials/statements-list";
 import { buildPeriods } from "@/lib/financials/build";
-import { analyze } from "@/lib/financials/analysis";
 
 export default async function FinancialsPage({
   searchParams,
@@ -74,24 +74,49 @@ export default async function FinancialsPage({
     })),
     periodEndByLabel
   );
-  const findings = analyze(periods);
   const hasData = periods.length > 0;
+  const isAdmin = Boolean(session?.isAdmin);
+
+  // Default the MRP year to the most recent loaded period, else the current year.
+  const latestEnd = (uploads ?? [])
+    .map((u) => u.period_end)
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .at(-1);
+  const defaultYear = latestEnd
+    ? Number(latestEnd.slice(0, 4))
+    : new Date().getFullYear();
 
   return (
     <PortalShell>
       <PortalHeader
         title="Financials"
-        subtitle={`${activeClient.name} · upload your P&L and Balance Sheet to see your numbers`}
-        actions={<FinancialUploader clientId={activeClient.id} />}
+        subtitle={
+          isAdmin
+            ? `${activeClient.name} · load the month-end workbook to refresh the dashboard`
+            : `${activeClient.name} · your numbers at a glance`
+        }
+        actions={
+          isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <MrpUploader clientId={activeClient.id} defaultYear={defaultYear} />
+              <FinancialUploader clientId={activeClient.id} />
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="mt-8 space-y-8">
         {hasData ? (
-          <FinancialDashboard periods={periods} findings={findings} />
+          <FinancialDashboard periods={periods} />
         ) : (
           <EmptyState
             title="No financials yet"
-            body="Upload a P&L or Balance Sheet export (.xlsx or .csv) and map the line items once. We'll turn it into live dashboards and flag your top areas for improvement."
+            body={
+              isAdmin
+                ? "Load the month-end (MRP) workbook to build live dashboards, or upload a single P&L / Balance Sheet and map the line items once."
+                : "Your financial dashboards will appear here once your advisor loads your month-end numbers."
+            }
             icon={
               <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden="true">
                 <path
@@ -106,7 +131,9 @@ export default async function FinancialsPage({
           />
         )}
 
-        <StatementsList statements={(uploads ?? []) as StatementRow[]} />
+        {isAdmin && (
+          <StatementsList statements={(uploads ?? []) as StatementRow[]} />
+        )}
       </div>
     </PortalShell>
   );
