@@ -42,8 +42,8 @@ export function analyze(periods: Period[]): Finding[] {
         severity: "critical",
         title: "Gross margin is well below a healthy range",
         current: percent(gm),
-        target: "50%+ (trades 55–70%)",
-        body: "Direct costs are eating too much of every dollar. Audit pricing, job costing, labor utilization, and material waste — this is usually the single biggest margin lever.",
+        target: "50%+ (trades 55-70%)",
+        body: "Direct costs are eating too much of every dollar. Audit pricing, job costing, labor utilization, and material waste. It's usually the single biggest margin lever.",
         lever: "Margin Expansion",
       });
     } else if (gm < 50) {
@@ -52,7 +52,7 @@ export function analyze(periods: Period[]): Finding[] {
         severity: "warn",
         title: "Gross margin has room to expand",
         current: percent(gm),
-        target: "50%+ (trades 55–70%)",
+        target: "50%+ (trades 55-70%)",
         body: "A few points of gross margin drop straight to EBITDA. Tighten pricing discipline and direct-cost control before adding overhead.",
         lever: "Margin Expansion",
       });
@@ -78,8 +78,8 @@ export function analyze(periods: Period[]): Finding[] {
         severity: "critical",
         title: "EBITDA margin is critically thin",
         current: percent(em),
-        target: "12–18%",
-        body: "There's little cushion for reinvestment, debt service, or a downturn. Attack overhead and pricing together — small moves compound fast at this level.",
+        target: "12-18%",
+        body: "There's little cushion for reinvestment, debt service, or a downturn. Attack overhead and pricing together; small moves compound fast at this level.",
         lever: "Margin Expansion",
       });
     } else if (em < 12) {
@@ -88,8 +88,8 @@ export function analyze(periods: Period[]): Finding[] {
         severity: "warn",
         title: "EBITDA margin is below target",
         current: percent(em),
-        target: "12–18%",
-        body: "You're profitable but under-earning for the revenue. Map the gap between gross margin and EBITDA — the leak is in overhead.",
+        target: "12-18%",
+        body: "You're profitable but under-earning for the revenue. Map the gap between gross margin and EBITDA: the leak is in overhead.",
         lever: "Margin Expansion",
       });
     } else {
@@ -98,7 +98,7 @@ export function analyze(periods: Period[]): Finding[] {
         severity: "good",
         title: "EBITDA margin is healthy",
         current: percent(em),
-        target: "12–18%",
+        target: "12-18%",
         body: "Strong operating profitability. Reinvest deliberately and keep the discipline.",
         lever: "Margin Expansion",
       });
@@ -118,7 +118,7 @@ export function analyze(periods: Period[]): Finding[] {
       severity: "warn",
       title: "Overhead is carrying too much of revenue",
       current: `${percent(pl.opexRatio)} of revenue`,
-      target: "Trim toward 25–35%",
+      target: "Trim toward 25-35%",
       body: "Operating expense is outpacing the value it creates. Zero-base the overhead line and tie each cost to an outcome.",
       lever: "Team Leverage",
     });
@@ -134,7 +134,7 @@ export function analyze(periods: Period[]): Finding[] {
         title: "Current liabilities exceed current assets",
         current: ratio(cr),
         target: "1.5×+",
-        body: "Short-term obligations outweigh short-term assets — a cash crunch risk. Build a 13-week cash forecast and prioritize collections and payment terms.",
+        body: "Short-term obligations outweigh short-term assets, a cash-crunch risk. Build a 13-week cash forecast and prioritize collections and payment terms.",
         lever: "Cash & Capital",
       });
     } else if (cr < 1.5) {
@@ -172,7 +172,7 @@ export function analyze(periods: Period[]): Finding[] {
         title: "Leverage is very high",
         current: ratio(de),
         target: "Below 2×",
-        body: "Debt dwarfs equity. Covenant and refinancing risk is real — model the runway and build a deleveraging plan.",
+        body: "Debt dwarfs equity. Covenant and refinancing risk is real; model the runway and build a deleveraging plan.",
         lever: "Cash & Capital",
       });
     } else if (de > 2) {
@@ -198,7 +198,7 @@ export function analyze(periods: Period[]): Finding[] {
         title: "Revenue declined versus the prior period",
         current: `${change.toFixed(1)}%`,
         target: "Stable or growing",
-        body: "Check pipeline and booked work 4–6 weeks out — revenue softness shows up there first. Confirm it's not a mix or seasonality artifact.",
+        body: "Check pipeline and booked work 4-6 weeks out, where revenue softness shows up first. Confirm it's not a mix or seasonality artifact.",
         lever: "Revenue Growth",
       });
     } else if (change > 5) {
