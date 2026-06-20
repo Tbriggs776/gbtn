@@ -13,6 +13,7 @@ const icons = {
   documents:
     "M7 3h7l5 5v13a0 0 0 0 1 0 0H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm7 1.5V8h3.5",
   financials: "M4 19V5m0 14h16M8 15l3-4 3 2 4-6",
+  account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0",
   admin:
     "M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z",
 } as const;
@@ -46,6 +47,7 @@ export function PortalNav({
     { label: "Overview", href: "/portal", icon: "overview" },
     { label: "Documents", href: "/portal/documents", icon: "documents" },
     { label: "Financials", href: "/portal/financials", icon: "financials" },
+    { label: "Account", href: "/portal/account", icon: "account" },
   ];
   if (isAdmin) items.push({ label: "Admin", href: "/portal/admin", icon: "admin" });
 
