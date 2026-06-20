@@ -95,12 +95,21 @@ async function main() {
   const { data: adminProfile } = await db.from("profiles").select("id").eq("role", "admin").limit(1).maybeSingle();
   const uploadedBy = adminProfile?.id ?? null;
 
-  // ── 1. Documents ────────────────────────────────────────────────────────
-  const { data: existing } = await db.from("documents").select("file_name").eq("client_id", cid);
-  const have = new Set((existing ?? []).map((d) => d.file_name));
+  // ── 1. Documents (replace: delete any existing with the same name, re-upload)
+  const { data: existing } = await db
+    .from("documents")
+    .select("id, file_name, storage_path")
+    .eq("client_id", cid);
+  const byName = {};
+  for (const d of existing ?? []) (byName[d.file_name] ??= []).push(d);
+
   for (const [src, name, ct] of FILES) {
-    if (have.has(name)) { console.log(`  · doc exists: ${name}`); continue; }
     if (!existsSync(DIR + src)) { console.log(`  ✖ missing file: ${src}`); continue; }
+    const dups = byName[name] ?? [];
+    for (const d of dups) {
+      if (d.storage_path) await db.storage.from(BUCKET).remove([d.storage_path]);
+      await db.from("documents").delete().eq("id", d.id);
+    }
     const buf = readFileSync(DIR + src);
     const path = `${cid}/${crypto.randomUUID()}-${safe(name)}`;
     const { error: ue } = await db.storage.from(BUCKET).upload(path, buf, { contentType: ct, upsert: false });
@@ -109,7 +118,10 @@ async function main() {
       client_id: cid, uploaded_by: uploadedBy, storage_path: path, file_name: name,
       byte_size: buf.length, content_type: ct, category: "Financials",
     });
-    console.log(re ? `  ✖ record ${name}: ${re.message}` : `  ✓ doc: ${name} (${buf.length}b)`);
+    console.log(
+      re ? `  ✖ record ${name}: ${re.message}`
+         : `  ${dups.length ? "↻ replaced" : "✓ added"}: ${name} (${buf.length}b)`
+    );
   }
 
   // ── 2. Financials (clean reload) ────────────────────────────────────────
