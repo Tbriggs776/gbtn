@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, CONTACT_NOTIFY_TO } from "@/lib/email";
+import { sendEmail, emailLayout, CONTACT_NOTIFY_TO } from "@/lib/email";
 
 export type ContactState = { ok?: boolean; error?: string };
 
@@ -70,18 +70,21 @@ export async function submitContactAction(
   }
 
   // 2. Notify by email (best-effort). Record whether it sent.
-  const html = `
-    <div style="font-family:system-ui,sans-serif;font-size:15px;color:#11294a">
-      <h2 style="margin:0 0 12px">New inquiry from the GBTN site</h2>
-      <table style="border-collapse:collapse">
-        <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Name</td><td><strong>${esc(d.name)}</strong></td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Email</td><td><a href="mailto:${esc(d.email)}">${esc(d.email)}</a></td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Company</td><td>${esc(d.company ?? "—")}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#6b7280">Revenue stage</td><td>${esc(d.revenue ?? "—")}</td></tr>
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 14px 4px 0;color:#9a958c;white-space:nowrap">${label}</td><td style="color:#11294a"><strong>${value}</strong></td></tr>`;
+  const html = emailLayout({
+    heading: "New inquiry from the website",
+    bodyHtml: `
+      <table role="presentation" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;">
+        ${row("Name", esc(d.name))}
+        ${row("Email", `<a href="mailto:${esc(d.email)}" style="color:#16335b">${esc(d.email)}</a>`)}
+        ${row("Company", esc(d.company ?? "—"))}
+        ${row("Revenue stage", esc(d.revenue ?? "—"))}
       </table>
-      <p style="margin:16px 0 6px;color:#6b7280">Message</p>
-      <p style="margin:0;white-space:pre-wrap;border-left:3px solid #9e2335;padding-left:12px">${esc(d.message)}</p>
-    </div>`;
+      <p style="margin:18px 0 6px;color:#9a958c;font-size:13px">Message</p>
+      <p style="margin:0;white-space:pre-wrap;border-left:3px solid #9e2335;padding-left:14px;color:#3a4252">${esc(d.message)}</p>`,
+    footnote: "Reply directly to this email to reach the prospect.",
+  });
 
   const sent = await sendEmail({
     subject: `New inquiry from ${d.name}`,

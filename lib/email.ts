@@ -69,36 +69,49 @@ export async function sendEmail({
 
 export const CONTACT_NOTIFY_TO = NOTIFY_TO;
 
-// Wraps body HTML in a consistent, on-brand shell (navy header, cream paper).
+// Logo loaded from the live site (must be deployed for the image to render).
+const LOGO_URL =
+  "https://growthbythenumbers.com/brand/lockup/lockup-horizontal-on-navy.png";
+
+// Wraps body HTML in the shared, on-brand email shell — table-based and
+// inline-styled so it renders consistently across email clients (incl. Outlook).
+// Matches the Supabase auth templates in supabase/email-templates/.
 export function emailLayout({
   heading,
   bodyHtml,
   ctaLabel,
   ctaUrl,
+  footnote,
 }: {
   heading: string;
   bodyHtml: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  footnote?: string;
 }): string {
   const button =
     ctaLabel && ctaUrl
-      ? `<a href="${ctaUrl}" style="display:inline-block;margin-top:20px;background:#9e2335;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:12px 22px;border-radius:8px">${ctaLabel}</a>`
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 4px;"><tr><td style="border-radius:8px;background:#9e2335;"><a href="${ctaUrl}" style="display:inline-block;padding:13px 26px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#f6f2ea;text-decoration:none;border-radius:8px;letter-spacing:0.02em;">${ctaLabel}</a></td></tr></table>`
       : "";
   return `
-  <div style="background:#f6f2ea;padding:28px 0;font-family:system-ui,-apple-system,Segoe UI,sans-serif">
-    <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e7e0d3;border-radius:14px;overflow:hidden">
-      <div style="background:#11294a;padding:18px 28px">
-        <span style="color:#f6f2ea;font-weight:700;letter-spacing:0.04em;font-size:15px">GROWTH BY THE NUMBERS</span>
-      </div>
-      <div style="padding:28px">
-        <h1 style="margin:0 0 14px;font-size:20px;color:#11294a">${heading}</h1>
-        <div style="font-size:15px;line-height:1.6;color:#3a4252">${bodyHtml}</div>
-        ${button}
-      </div>
-      <div style="padding:16px 28px;border-top:1px solid #e7e0d3;font-size:12px;color:#9a958c">
-        Growth by the Numbers · Fractional CFO &amp; Value Creation
-      </div>
-    </div>
-  </div>`;
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f2ea;">
+    <tr><td align="center" style="padding:28px 14px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e7e0d3;border-radius:14px;overflow:hidden;">
+        <tr><td style="background:#11294a;padding:22px 32px;">
+          <img src="${LOGO_URL}" alt="Growth by the Numbers" height="26" style="height:26px;width:auto;display:block;border:0;outline:none;">
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <h1 style="margin:0 0 14px;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.25;color:#11294a;font-weight:700;">${heading}</h1>
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#3a4252;">${bodyHtml}</div>
+          ${button}
+        </td></tr>
+        <tr><td style="padding:18px 32px;border-top:1px solid #e7e0d3;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#9a958c;line-height:1.5;">
+          Growth by the Numbers · Fractional CFO &amp; Value Creation${
+            footnote ? `<br>${footnote}` : ""
+          }
+        </td></tr>
+      </table>
+      <p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#c0b7a6;margin:14px 0 0;">© Growth by the Numbers</p>
+    </td></tr>
+  </table>`;
 }

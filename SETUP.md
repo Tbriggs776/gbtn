@@ -68,6 +68,11 @@ In **Supabase → Authentication**:
    - This covers all Supabase *auth* email. App notifications (contact form, new
      financials) go through Resend directly via `RESEND_API_KEY` + `EMAIL_FROM`.
 
+5. *(Recommended) Brand the auth emails.* Paste the ready-made HTML from
+   `supabase/email-templates/` into **Authentication → Emails → Templates**
+   (Confirm signup, Invite, Magic Link, Change Email, Reset Password,
+   Reauthentication). Subjects + the full mapping are in that folder's README.
+
 ---
 
 ## 4. Make yourself the admin
