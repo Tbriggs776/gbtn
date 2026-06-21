@@ -99,6 +99,9 @@ export async function submitContactAction(
     } catch {
       /* non-fatal: the lead is stored regardless */
     }
+  } else if (!sent.ok) {
+    // Lead is saved; surface why the notification didn't send (Vercel logs).
+    console.error("[contact] notification email failed:", sent.error);
   }
 
   // The submission is saved either way, so the visitor always sees success.
