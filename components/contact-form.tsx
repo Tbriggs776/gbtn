@@ -1,50 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState } from "react";
 import { site } from "@/lib/site";
 import { Check } from "./ui";
+import { submitContactAction, type ContactState } from "@/app/(marketing)/contact/actions";
+
+const initial: ContactState = {};
 
 export function ContactForm() {
-  const [sent, setSent] = useState(false);
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    const name = String(data.get("name") || "");
-    const company = String(data.get("company") || "");
-    const revenue = String(data.get("revenue") || "");
-    const message = String(data.get("message") || "");
-    const email = String(data.get("email") || "");
-
-    const subject = encodeURIComponent(
-      `New inquiry from ${name || "the GBTN site"}`
-    );
-    const body = encodeURIComponent(
-      `Name: ${name}\nEmail: ${email}\nCompany: ${company}\nRevenue stage: ${revenue}\n\n${message}`
-    );
-    // Opens the visitor's email client pre-filled. TODO: swap for a Formspree
-    // (or similar) POST endpoint to capture leads server-side without mailto.
-    window.location.href = `mailto:${site.founder.email}?subject=${subject}&body=${body}`;
-    setSent(true);
-  }
+  const [state, action, pending] = useActionState(submitContactAction, initial);
 
   const field =
     "w-full rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink placeholder:text-muted-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100";
   const label = "mb-1.5 block text-sm font-medium text-ink";
 
-  if (sent) {
+  if (state.ok) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-brand-200 bg-brand-50/60 p-10 text-center">
         <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-brand text-white">
           <Check className="text-white" />
         </div>
         <h3 className="mt-4 text-lg font-bold text-ink">
-          Your email is ready to send.
+          Thanks — your message is in.
         </h3>
         <p className="mt-2 max-w-sm text-sm text-muted">
-          Your mail app should have opened with the details filled in. If it
-          didn&apos;t, reach me directly at{" "}
+          I read every inquiry personally and typically reply within one
+          business day. Need me sooner? Reach me directly at{" "}
           <a
             href={`mailto:${site.founder.email}`}
             className="font-medium text-brand-700 underline-offset-4 hover:underline"
@@ -58,7 +39,13 @@ export function ContactForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
+    <form action={action} className="grid gap-4">
+      {/* Honeypot: hidden from real users; bots fill it and get silently dropped. */}
+      <div className="hidden" aria-hidden="true">
+        <label htmlFor="website">Website</label>
+        <input id="website" name="website" tabIndex={-1} autoComplete="off" />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="name" className={label}>
@@ -116,11 +103,17 @@ export function ContactForm() {
           placeholder="Where you are, where you're trying to go, and what's getting in the way."
         />
       </div>
+
+      {state.error ? (
+        <p className="text-sm text-red-600">{state.error}</p>
+      ) : null}
+
       <button
         type="submit"
-        className="bg-gradient-brand mt-2 inline-flex items-center justify-center rounded-full px-6 py-3.5 text-sm font-semibold text-white ring-soft transition-all hover:-translate-y-0.5 hover:brightness-110"
+        disabled={pending}
+        className="bg-gradient-brand mt-2 inline-flex items-center justify-center rounded-full px-6 py-3.5 text-sm font-semibold text-white ring-soft transition-all hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-60 disabled:hover:translate-y-0"
       >
-        Send message
+        {pending ? "Sending…" : "Send message"}
       </button>
       <p className="text-xs text-muted-soft">
         Prefer to talk? Call {site.founder.phone} or connect on LinkedIn.
