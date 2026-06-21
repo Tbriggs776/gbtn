@@ -8,7 +8,7 @@ export default async function AccountPage() {
     <PortalShell>
       <PortalHeader
         title="Account"
-        subtitle="Update your name and password."
+        subtitle="Update your name, sign-in email, and password."
       />
       <div className="mt-8">
         <AccountForms

@@ -30,6 +30,33 @@ export async function updateNameAction(
   return { ok: true, message: "Name updated." };
 }
 
+const emailSchema = z.object({ email: z.string().trim().email("Enter a valid email.") });
+
+export async function updateEmailAction(
+  _prev: AccountState,
+  formData: FormData
+): Promise<AccountState> {
+  const session = await requireSession();
+  const parsed = emailSchema.safeParse({ email: String(formData.get("email") ?? "").trim() });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid email." };
+
+  const newEmail = parsed.data.email.toLowerCase();
+  if (newEmail === (session.user.email ?? "").toLowerCase())
+    return { error: "That's already your sign-in email." };
+
+  const supabase = await createClient();
+  // Supabase emails a confirmation link (the "Change Email Address" template).
+  // The address only switches after the user clicks it; the "Email changed"
+  // notification fires on confirmation in /auth/confirm.
+  const { error } = await supabase.auth.updateUser({ email: newEmail });
+  if (error) return { error: error.message };
+
+  return {
+    ok: true,
+    message: `Confirmation sent to ${newEmail}. Click the link in that email to finish the change.`,
+  };
+}
+
 const pwSchema = z
   .object({
     password: z.string().min(8, "Use at least 8 characters."),

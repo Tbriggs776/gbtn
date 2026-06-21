@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import {
   updateNameAction,
+  updateEmailAction,
   updatePasswordAction,
   type AccountState,
 } from "@/app/portal/account/actions";
@@ -40,6 +41,7 @@ export function AccountForms({
   fullName: string;
 }) {
   const [nameState, nameAction, namePending] = useActionState(updateNameAction, initial);
+  const [emailState, emailAction, emailPending] = useActionState(updateEmailAction, initial);
   const [pwState, pwAction, pwPending] = useActionState(updatePasswordAction, initial);
   const pwRef = useRef<HTMLFormElement>(null);
 
@@ -72,6 +74,36 @@ export function AccountForms({
           <div className="flex items-center justify-between gap-3">
             <Feedback state={nameState} />
             <Submit label="Save name" pending={namePending} />
+          </div>
+        </form>
+      </section>
+
+      {/* Email */}
+      <section className="rounded-lg border border-line bg-white p-6 ring-soft">
+        <h2 className="text-base font-bold text-ink">Change sign-in email</h2>
+        <p className="mt-1 mb-5 text-sm text-muted">
+          We&apos;ll email a confirmation link to the new address. Your email
+          changes only after you click it.
+        </p>
+        <form action={emailAction} className="space-y-4">
+          <div>
+            <label htmlFor="email" className={labelCls}>
+              New email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              defaultValue=""
+              placeholder="you@company.com"
+              className={field}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <Feedback state={emailState} />
+            <Submit label="Send confirmation" pending={emailPending} />
           </div>
         </form>
       </section>
