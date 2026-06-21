@@ -80,6 +80,16 @@ export function MrpUploader({
           </div>
         </div>
 
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            name="notify"
+            defaultChecked
+            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-100"
+          />
+          Email the client that new financials are ready
+        </label>
+
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
         {state.ok && state.message ? (
           <p className="text-sm text-brand-700">{state.message}</p>

@@ -1,11 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession, requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { parseWorkbook } from "@/lib/financials/parse";
 import { parseMrp } from "@/lib/financials/mrp";
+import { emailLayout } from "@/lib/email";
+import { notifyClientMembers } from "@/lib/notify";
 import {
   guessCategory,
   normalizeLabel,
@@ -261,13 +264,60 @@ export async function loadMrpAction(
 
   revalidatePath("/portal/financials");
   revalidatePath("/portal");
+
+  // Optional: notify the client's team that fresh numbers are live.
+  let notice = "";
+  if (formData.get("notify")) {
+    const { data: client } = await supabase
+      .from("clients")
+      .select("name")
+      .eq("id", clientId)
+      .single();
+    const first = result.periods[0].label;
+    const last = result.periods[result.periods.length - 1].label;
+    const range =
+      result.periods.length === 1 ? first : `${first} – ${last}`;
+
+    const h = await headers();
+    const origin =
+      process.env.NEXT_PUBLIC_SITE_URL ??
+      `${h.get("x-forwarded-proto") ?? "https"}://${
+        h.get("x-forwarded-host") ?? h.get("host")
+      }`;
+
+    const html = emailLayout({
+      heading: "Your latest financials are ready",
+      bodyHtml: `Hi there,<br/><br/>New month-end financials for <strong>${
+        client?.name ?? "your company"
+      }</strong> have been loaded into your portal (${range}). Sign in to see your updated dashboards and top areas for improvement.`,
+      ctaLabel: "View your financials",
+      ctaUrl: `${origin}/portal/financials`,
+    });
+
+    try {
+      const res = await notifyClientMembers(clientId, {
+        subject: "Your latest financials are ready · Growth by the Numbers",
+        html,
+        excludeUserId: session.user.id,
+      });
+      notice =
+        res.sent > 0
+          ? ` Notified ${res.sent} client ${res.sent === 1 ? "user" : "users"}.`
+          : res.recipients === 0
+            ? " (No client users to notify yet.)"
+            : " (Couldn't send the client email — check email setup.)";
+    } catch {
+      notice = " (Couldn't send the client email — check email setup.)";
+    }
+  }
+
   return {
     ok: true,
     message: `Loaded ${result.periods.length} month${
       result.periods.length === 1 ? "" : "s"
     } (${statements} statements).${
       result.warnings.length ? " " + result.warnings.join(" ") : ""
-    }`,
+    }${notice}`,
   };
 }
 

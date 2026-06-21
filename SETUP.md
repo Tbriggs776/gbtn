@@ -57,6 +57,17 @@ In **Supabase → Authentication**:
    ```
    If you skip this, the default `code`-based links still work for same-device sign-ins.
 
+4. *(Recommended) Route auth emails through Resend (Custom SMTP).* Supabase's built-in
+   email is rate-limited (~2/hour) and sends from a generic address. To send invites,
+   password resets, and magic links from your own domain with no rate limit:
+   - Verify `growthbythenumbers.com` in **Resend → Domains** (add the DNS records).
+   - In **Supabase → Authentication → Emails → SMTP Settings**, enable **Custom SMTP**:
+     - **Host:** `smtp.resend.com` · **Port:** `465` · **Username:** `resend`
+     - **Password:** your `RESEND_API_KEY`
+     - **Sender email:** `noreply@growthbythenumbers.com` · **Sender name:** `Growth by the Numbers`
+   - This covers all Supabase *auth* email. App notifications (contact form, new
+     financials) go through Resend directly via `RESEND_API_KEY` + `EMAIL_FROM`.
+
 ---
 
 ## 4. Make yourself the admin
