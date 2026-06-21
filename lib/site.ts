@@ -14,7 +14,7 @@ export const site = {
     name: "Tyler Briggs",
     title: "Founder, President & CFO",
     location: "Arizona · Remote nationwide",
-    email: "tyler.briggs@outlook.com",
+    email: "tyler@tylermbriggs.com",
     phone: "480.407.8503",
     phoneHref: "tel:+14804078503",
     linkedin: "https://www.linkedin.com/in/tylermarkbriggs",

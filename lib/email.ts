@@ -18,7 +18,7 @@ const FROM =
   "Growth by the Numbers <onboarding@resend.dev>";
 
 // Where lead/admin notifications land. Defaults to Tyler's address.
-const NOTIFY_TO = process.env.CONTACT_NOTIFY_TO ?? "tyler.briggs@outlook.com";
+const NOTIFY_TO = process.env.CONTACT_NOTIFY_TO ?? "tyler@tylermbriggs.com";
 
 export const isEmailConfigured = Boolean(RESEND_API_KEY);
 
