@@ -48,6 +48,15 @@ export default async function MarketingPage({
               attribute revenue to each channel and chart the trend. Spend and lead
               metrics will layer in once your ad platforms are connected.
             </p>
+            <a
+              href="/portal/marketing/template"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+                <path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Download the Excel template
+            </a>
           </div>
         )}
       </div>

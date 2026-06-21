@@ -65,13 +65,21 @@ export function RevenueUploader({ clientId }: { clientId: string }) {
           <p className="text-sm text-brand-700">{state.message}</p>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="font-label inline-flex items-center justify-center rounded-md bg-gradient-brand px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-cream ring-soft transition-all hover:brightness-110 disabled:opacity-60"
-        >
-          {pending ? "Importing…" : "Import & refresh"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="submit"
+            disabled={pending}
+            className="font-label inline-flex items-center justify-center rounded-md bg-gradient-brand px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-cream ring-soft transition-all hover:brightness-110 disabled:opacity-60"
+          >
+            {pending ? "Importing…" : "Import & refresh"}
+          </button>
+          <a
+            href="/portal/marketing/template"
+            className="text-xs font-medium text-brand-700 underline-offset-4 hover:underline"
+          >
+            Download template
+          </a>
+        </div>
       </form>
     </div>
   );
