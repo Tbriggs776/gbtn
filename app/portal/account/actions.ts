@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { sendEmail, emailLayout } from "@/lib/email";
 
 export type AccountState = { ok?: boolean; error?: string; message?: string };
 
@@ -43,7 +44,7 @@ export async function updatePasswordAction(
   _prev: AccountState,
   formData: FormData
 ): Promise<AccountState> {
-  await requireSession();
+  const session = await requireSession();
   const parsed = pwSchema.safeParse({
     password: String(formData.get("password") ?? ""),
     confirm: String(formData.get("confirm") ?? ""),
@@ -53,6 +54,21 @@ export async function updatePasswordAction(
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
   if (error) return { error: error.message };
+
+  // Security notification (best-effort): tell the user their password changed.
+  const email = session.user.email;
+  if (email) {
+    const html = emailLayout({
+      heading: "Your password was changed",
+      bodyHtml: `The password on your Growth by the Numbers account (<strong style="color:#11294a">${email}</strong>) was just changed. If this was you, no action is needed.
+        <div style="font-size:14px;line-height:1.6;color:#3a4252;background:#fbf8f2;border-left:3px solid #9e2335;border-radius:0 8px 8px 0;padding:14px 16px;margin:22px 0 0;"><strong style="color:#11294a;">Didn't make this change?</strong> Reset your password right away and contact us at tyler@tylermbriggs.com.</div>`,
+    });
+    await sendEmail({
+      to: email,
+      subject: "Your password was changed · Growth by the Numbers",
+      html,
+    });
+  }
 
   return { ok: true, message: "Password updated." };
 }
