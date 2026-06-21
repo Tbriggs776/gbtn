@@ -5,6 +5,7 @@ import type { ConnectionRow, Provider } from "@/lib/marketing/service";
 import {
   connectCallRailAction,
   disconnectConnectionAction,
+  syncNowAction,
   type SettingsState,
 } from "@/app/portal/settings/actions";
 
@@ -92,6 +93,9 @@ function ChannelCard({
           {connected && connection?.display_name ? (
             <p className="mt-1 text-xs text-muted-soft">
               Account: {connection.display_name}
+              {connection.last_synced_at
+                ? ` · last synced ${new Date(connection.last_synced_at).toLocaleString()}`
+                : " · not synced yet"}
             </p>
           ) : null}
         </div>
@@ -100,7 +104,10 @@ function ChannelCard({
       <div className="mt-4">
         {channel.provider === "callrail" ? (
           connected ? (
-            <DisconnectForm clientId={clientId} connectionId={connection!.id} />
+            <div className="flex flex-wrap items-center gap-3">
+              <SyncNowForm clientId={clientId} />
+              <DisconnectForm clientId={clientId} connectionId={connection!.id} />
+            </div>
           ) : (
             <CallRailConnectForm clientId={clientId} />
           )
@@ -151,6 +158,26 @@ function CallRailConnectForm({ clientId }: { clientId: string }) {
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
       {state.ok && state.message ? (
         <p className="text-sm text-brand-700">{state.message}</p>
+      ) : null}
+    </form>
+  );
+}
+
+function SyncNowForm({ clientId }: { clientId: string }) {
+  const [state, action, pending] = useActionState(syncNowAction, initial);
+  return (
+    <form action={action} className="flex items-center gap-3">
+      <input type="hidden" name="clientId" value={clientId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="font-label inline-flex items-center justify-center rounded-md bg-ink px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-cream transition-all hover:bg-ink-soft disabled:opacity-60"
+      >
+        {pending ? "Syncing…" : "Sync now"}
+      </button>
+      {state.error ? <span className="text-sm text-red-600">{state.error}</span> : null}
+      {state.ok && state.message ? (
+        <span className="text-sm text-brand-700">{state.message}</span>
       ) : null}
     </form>
   );

@@ -8,6 +8,7 @@ import {
   upsertCallRailConnection,
   disconnectConnection,
 } from "@/lib/marketing/service";
+import { syncClientConnections } from "@/lib/marketing/sync";
 
 export type SettingsState = { ok?: boolean; error?: string; message?: string };
 
@@ -78,4 +79,30 @@ export async function disconnectConnectionAction(
   await disconnectConnection(connectionId, clientId);
   revalidatePath("/portal/settings");
   return { ok: true, message: "Disconnected." };
+}
+
+export async function syncNowAction(
+  _prev: SettingsState,
+  formData: FormData
+): Promise<SettingsState> {
+  const clientId = String(formData.get("clientId") ?? "");
+  try {
+    await assertMember(clientId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not authorized." };
+  }
+
+  try {
+    const r = await syncClientConnections(clientId);
+    revalidatePath("/portal/settings");
+    revalidatePath("/portal/marketing");
+    return {
+      ok: true,
+      message: r.errors
+        ? `Synced with ${r.errors} error(s); updated ${r.rows} day-row(s).`
+        : `Synced — updated ${r.rows} day-row(s).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Sync failed." };
+  }
 }

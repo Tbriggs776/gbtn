@@ -34,8 +34,8 @@ export async function verifyCallRail(
   }
 }
 
-// Pull daily call counts for a date range, grouped by day. Used by the sync job
-// (next increment). Returns rows shaped for marketing_metrics_daily.
+// Pull calls for a date range and aggregate by day. Uses the calls list
+// endpoint (stable) and counts a "lead" as a call with lead_status 'good_lead'.
 export type CallRailDay = { date: string; calls: number; leads: number };
 
 export async function fetchCallRailDailyCalls(
@@ -44,21 +44,37 @@ export async function fetchCallRailDailyCalls(
   startDate: string,
   endDate: string
 ): Promise<CallRailDay[]> {
-  // CallRail timeseries: calls grouped by day over a date range.
-  const url = new URL(`${BASE}/a/${accountId}/calls/timeseries.json`);
-  url.searchParams.set("group_by", "day");
-  url.searchParams.set("start_date", startDate);
-  url.searchParams.set("end_date", endDate);
-  url.searchParams.set("fields", "calls_count,leads_count");
+  const byDay = new Map<string, { calls: number; leads: number }>();
+  let page = 1;
+  let totalPages = 1;
 
-  const res = await fetch(url.toString(), { headers: authHeader(apiKey), cache: "no-store" });
-  if (!res.ok) throw new Error(`CallRail timeseries error ${res.status}`);
-  const json = (await res.json()) as {
-    timeseries?: Array<{ date: string; calls_count?: number; leads_count?: number }>;
-  };
-  return (json.timeseries ?? []).map((r) => ({
-    date: r.date,
-    calls: r.calls_count ?? 0,
-    leads: r.leads_count ?? 0,
-  }));
+  do {
+    const url = new URL(`${BASE}/a/${accountId}/calls.json`);
+    url.searchParams.set("start_date", startDate);
+    url.searchParams.set("end_date", endDate);
+    url.searchParams.set("fields", "lead_status");
+    url.searchParams.set("per_page", "250");
+    url.searchParams.set("page", String(page));
+
+    const res = await fetch(url.toString(), { headers: authHeader(apiKey), cache: "no-store" });
+    if (!res.ok) throw new Error(`CallRail calls error ${res.status}`);
+    const json = (await res.json()) as {
+      calls?: Array<{ start_time?: string; lead_status?: string }>;
+      total_pages?: number;
+    };
+
+    for (const c of json.calls ?? []) {
+      const date = String(c.start_time ?? "").slice(0, 10);
+      if (!date) continue;
+      const e = byDay.get(date) ?? { calls: 0, leads: 0 };
+      e.calls += 1;
+      if (c.lead_status === "good_lead") e.leads += 1;
+      byDay.set(date, e);
+    }
+
+    totalPages = json.total_pages ?? 1;
+    page += 1;
+  } while (page <= totalPages && page <= 20); // safety cap
+
+  return [...byDay.entries()].map(([date, v]) => ({ date, calls: v.calls, leads: v.leads }));
 }
