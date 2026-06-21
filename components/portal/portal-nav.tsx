@@ -13,6 +13,7 @@ const icons = {
   documents:
     "M7 3h7l5 5v13a0 0 0 0 1 0 0H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm7 1.5V8h3.5",
   financials: "M4 19V5m0 14h16M8 15l3-4 3 2 4-6",
+  marketing: "M3 3v18h18M7 14l3-3 3 3 5-6",
   account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0",
   settings:
     "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
@@ -49,6 +50,7 @@ export function PortalNav({
     { label: "Overview", href: "/portal", icon: "overview" },
     { label: "Documents", href: "/portal/documents", icon: "documents" },
     { label: "Financials", href: "/portal/financials", icon: "financials" },
+    { label: "Marketing", href: "/portal/marketing", icon: "marketing" },
     { label: "Settings", href: "/portal/settings", icon: "settings" },
     { label: "Account", href: "/portal/account", icon: "account" },
   ];
