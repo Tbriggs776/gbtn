@@ -1,21 +1,48 @@
 import { requireAdmin, getAccessibleClients } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { PortalHeader, PortalShell } from "@/components/portal/ui";
 import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-forms";
+import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 
 export default async function AdminPage() {
   await requireAdmin();
   const clients = await getAccessibleClients();
 
-  // Member counts per client (admin can read all memberships via RLS).
+  // Memberships (admin can read all via RLS) → per-client counts + per-user list.
   const supabase = await createClient();
   const { data: memberships } = await supabase
     .from("memberships")
-    .select("client_id");
+    .select("user_id, client_id");
   const counts = new Map<string, number>();
+  const clientsByUser = new Map<string, string[]>();
   for (const m of memberships ?? []) {
     counts.set(m.client_id, (counts.get(m.client_id) ?? 0) + 1);
+    const arr = clientsByUser.get(m.user_id) ?? [];
+    arr.push(m.client_id);
+    clientsByUser.set(m.user_id, arr);
   }
+
+  // All auth users (service role) + their profiles, for the user manager.
+  const admin = createAdminClient();
+  const [{ data: userList }, { data: profiles }] = await Promise.all([
+    admin.auth.admin.listUsers({ perPage: 200 }),
+    supabase.from("profiles").select("id, full_name, role"),
+  ]);
+  const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const users: AdminUser[] = (userList?.users ?? [])
+    .map((u) => ({
+      id: u.id,
+      email: u.email ?? "",
+      name:
+        profileById.get(u.id)?.full_name ??
+        (u.user_metadata?.full_name as string | undefined) ??
+        "",
+      role: profileById.get(u.id)?.role ?? "client",
+      lastSignIn: u.last_sign_in_at ?? null,
+      clientIds: clientsByUser.get(u.id) ?? [],
+    }))
+    .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 
   // Recent contact-form inquiries (admin-only via RLS).
   const { data: inquiries } = await supabase
@@ -89,6 +116,22 @@ export default async function AdminPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
+        <div className="border-b border-line px-6 py-4">
+          <h2 className="text-base font-bold text-ink">
+            Users{" "}
+            <span className="text-sm font-normal text-muted-soft">
+              ({users.length})
+            </span>
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-soft">
+            Manage client access (a user can belong to several clients), see last
+            login, and send password resets.
+          </p>
+        </div>
+        <AdminUsers users={users} clients={clients} />
       </section>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">

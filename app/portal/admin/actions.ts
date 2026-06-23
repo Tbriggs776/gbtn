@@ -117,3 +117,65 @@ export async function inviteUserAction(
   revalidatePath("/portal/admin");
   return { ok: true, message: `Invite sent to ${email}.` };
 }
+
+// Admin: replace a user's client memberships with the selected set (many-to-many).
+const setClientsSchema = z.object({
+  userId: z.string().uuid("Invalid user."),
+  clientIds: z.array(z.string().uuid()),
+});
+
+export async function setUserClientsAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const parsed = setClientsSchema.safeParse({
+    userId: String(formData.get("userId") ?? ""),
+    clientIds: formData.getAll("clientIds").map(String).filter(Boolean),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const { userId, clientIds } = parsed.data;
+  const admin = createAdminClient();
+
+  // Replace the full set: clear, then insert the chosen clients.
+  const { error: delErr } = await admin.from("memberships").delete().eq("user_id", userId);
+  if (delErr) return { error: delErr.message };
+
+  if (clientIds.length > 0) {
+    const rows = clientIds.map((client_id) => ({ user_id: userId, client_id }));
+    const { error: insErr } = await admin.from("memberships").insert(rows);
+    if (insErr) return { error: insErr.message };
+  }
+
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal");
+  return {
+    ok: true,
+    message: `Updated access — ${clientIds.length} client${clientIds.length === 1 ? "" : "s"}.`,
+  };
+}
+
+// Admin: email a password-reset link to a user (uses the configured SMTP +
+// branded recovery template).
+const resetSchema = z.object({ email: z.string().email() });
+
+export async function resetUserPasswordAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const parsed = resetSchema.safeParse({ email: String(formData.get("email") ?? "").trim() });
+  if (!parsed.success) return { error: "Invalid email." };
+
+  const supabase = await createClient();
+  const origin = await getOrigin();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: `${origin}/auth/confirm?next=/portal/account`,
+  });
+  if (error) return { error: error.message };
+
+  return { ok: true, message: `Reset link sent to ${parsed.data.email}.` };
+}

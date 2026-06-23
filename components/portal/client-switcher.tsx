@@ -3,22 +3,21 @@
 import { usePathname, useRouter } from "next/navigation";
 import type { Client } from "@/lib/types";
 
-// For admins (who can access multiple clients) this is a dropdown that re-targets
-// the current page at a different client via ?client=. For a single-client user
-// it just shows the client name.
+// Anyone with access to more than one client (admins, or client users who belong
+// to multiple clients) gets a dropdown that re-targets the current page via
+// ?client=. A single-client user just sees the client name.
 export function ClientSwitcher({
   clients,
   activeClientId,
-  isAdmin,
 }: {
   clients: Client[];
   activeClientId: string | null;
-  isAdmin: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  if (!isAdmin || clients.length <= 1) {
+  if (clients.length <= 1) {
     const active =
       clients.find((c) => c.id === activeClientId) ?? clients[0];
     return (
