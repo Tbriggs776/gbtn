@@ -1,12 +1,19 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import type { Client } from "@/lib/types";
 import {
   createClientAction,
   inviteUserAction,
   type ActionState,
 } from "@/app/portal/admin/actions";
+
+function generatePassword(): string {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const arr = new Uint32Array(14);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, (x) => chars[x % chars.length]).join("");
+}
 
 const initial: ActionState = {};
 
@@ -61,9 +68,13 @@ export function CreateClientForm() {
 export function InviteUserForm({ clients }: { clients: Client[] }) {
   const [state, action, pending] = useActionState(inviteUserAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
-    if (state.ok) formRef.current?.reset();
+    if (state.ok) {
+      formRef.current?.reset();
+      setPassword("");
+    }
   }, [state.ok]);
 
   if (clients.length === 0) {
@@ -105,9 +116,38 @@ export function InviteUserForm({ clients }: { clients: Client[] }) {
           ))}
         </select>
       </div>
+      <div>
+        <label htmlFor="password" className={labelClass}>
+          Starter password
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="password"
+            name="password"
+            type="text"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={fieldClass}
+            placeholder="At least 8 characters"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            onClick={() => setPassword(generatePassword())}
+            className="shrink-0 rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-muted transition-colors hover:text-ink"
+          >
+            Generate
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-muted-soft">
+          Share this with the user. They&apos;ll be prompted to change it after signing in.
+        </p>
+      </div>
       <div className="flex items-center justify-between gap-3">
         <Feedback state={state} />
-        <SubmitButton label="Send invite" pending={pending} />
+        <SubmitButton label="Create user" pending={pending} />
       </div>
     </form>
   );

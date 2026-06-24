@@ -64,58 +64,61 @@ export async function createClientAction(
   return { error: "Could not generate a unique slug. Try a different name." };
 }
 
-const inviteSchema = z.object({
+const createUserSchema = z.object({
   email: z.string().email("Enter a valid email."),
   clientId: z.string().uuid("Pick a client."),
   fullName: z.string().max(120).optional(),
+  password: z.string().min(8, "Password must be at least 8 characters."),
 });
 
+// Admin creates a user with a starter password. The user signs in with it and
+// is prompted to change it (must_change_password flag, cleared on change).
 export async function inviteUserAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
   await requireAdmin();
 
-  const parsed = inviteSchema.safeParse({
+  const parsed = createUserSchema.safeParse({
     email: String(formData.get("email") ?? "").trim(),
     clientId: String(formData.get("clientId") ?? ""),
     fullName: String(formData.get("fullName") ?? "").trim() || undefined,
+    password: String(formData.get("password") ?? ""),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  const { email, clientId, fullName } = parsed.data;
+  const { email, clientId, fullName, password } = parsed.data;
   const admin = createAdminClient();
-  const origin = await getOrigin();
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${origin}/auth/confirm?next=/portal`,
-    data: fullName ? { full_name: fullName } : undefined,
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // no confirmation email; admin shares the password
+    user_metadata: {
+      ...(fullName ? { full_name: fullName } : {}),
+      must_change_password: true,
+    },
   });
 
   if (error) {
-    if (/already been registered|already exists/i.test(error.message)) {
-      return {
-        error:
-          "That email already has an account. (Linking existing users to a client is coming soon.)",
-      };
+    if (/already.*(registered|exists)|exists/i.test(error.message)) {
+      return { error: "That email already has an account." };
     }
     return { error: error.message };
   }
 
   const userId = data.user?.id;
   if (userId) {
-    await admin
-      .from("memberships")
-      .upsert({ user_id: userId, client_id: clientId });
-    if (fullName) {
-      await admin.from("profiles").update({ full_name: fullName }).eq("id", userId);
-    }
+    await admin.from("memberships").upsert({ user_id: userId, client_id: clientId });
   }
 
   revalidatePath("/portal/admin");
-  return { ok: true, message: `Invite sent to ${email}.` };
+  return {
+    ok: true,
+    message: `Created ${email}. Share the password — they'll be prompted to change it after signing in.`,
+  };
 }
 
 // Admin: replace a user's client memberships with the selected set (many-to-many).
@@ -163,6 +166,7 @@ const updateUserSchema = z.object({
   fullName: z.string().trim().max(120).optional(),
   email: z.string().trim().email("Enter a valid email.").optional(),
   role: z.enum(["admin", "client"]).optional(),
+  password: z.string().min(8, "Password must be at least 8 characters.").optional(),
 });
 
 export async function updateUserAction(
@@ -176,10 +180,11 @@ export async function updateUserAction(
     fullName: String(formData.get("fullName") ?? "").trim() || undefined,
     email: String(formData.get("email") ?? "").trim() || undefined,
     role: (String(formData.get("role") ?? "") || undefined) as "admin" | "client" | undefined,
+    password: String(formData.get("password") ?? "") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
-  const { userId, fullName, email, role } = parsed.data;
+  const { userId, fullName, email, role, password } = parsed.data;
 
   // Don't let an admin demote themselves (avoid locking out the last admin).
   if (role === "client" && userId === session.user.id) {
@@ -188,17 +193,25 @@ export async function updateUserAction(
 
   const admin = createAdminClient();
 
-  // Auth: email + display-name metadata.
+  // Auth: email + password + display-name metadata.
   const authUpdate: {
     email?: string;
     email_confirm?: boolean;
-    user_metadata?: { full_name: string };
+    password?: string;
+    user_metadata?: { full_name?: string; must_change_password?: boolean };
   } = {};
   if (email) {
     authUpdate.email = email;
     authUpdate.email_confirm = true; // admin override, no re-confirmation needed
   }
-  if (fullName !== undefined) authUpdate.user_metadata = { full_name: fullName };
+  if (password) {
+    authUpdate.password = password;
+    // Admin set a new password → prompt the user to change it on next login.
+    authUpdate.user_metadata = { ...authUpdate.user_metadata, must_change_password: true };
+  }
+  if (fullName !== undefined) {
+    authUpdate.user_metadata = { ...authUpdate.user_metadata, full_name: fullName };
+  }
   if (Object.keys(authUpdate).length > 0) {
     const { error } = await admin.auth.admin.updateUserById(userId, authUpdate);
     if (error) return { error: error.message };

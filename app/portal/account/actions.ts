@@ -79,7 +79,10 @@ export async function updatePasswordAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid password." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+    data: { must_change_password: false }, // clear the first-login prompt
+  });
   if (error) return { error: error.message };
 
   // Security notification (best-effort): tell the user their password changed.

@@ -100,9 +100,10 @@ export default async function AdminPage() {
         </section>
 
         <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
-          <h2 className="text-base font-bold text-ink">Invite a user</h2>
+          <h2 className="text-base font-bold text-ink">Create a user</h2>
           <p className="mt-1 mb-5 text-sm text-muted">
-            Sends a secure magic-link invite and links them to the client.
+            Set a starter password and link them to a client. They change it
+            after first sign-in.
           </p>
           <InviteUserForm clients={clients} />
         </section>

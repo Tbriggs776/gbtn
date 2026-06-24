@@ -180,6 +180,22 @@ function UserRow({
               </select>
             </div>
           </div>
+          <div className="mt-3">
+            <label className="mb-1 block text-xs font-medium text-ink">
+              Set new password <span className="text-muted-soft">(optional)</span>
+            </label>
+            <input
+              name="password"
+              type="text"
+              minLength={8}
+              autoComplete="off"
+              className={`${field} sm:max-w-xs`}
+              placeholder="Leave blank to keep current"
+            />
+            <p className="mt-1 text-[11px] text-muted-soft">
+              Sets a new password and prompts them to change it on next login.
+            </p>
+          </div>
           <div className="mt-3 flex items-center gap-3">
             <button
               type="submit"
