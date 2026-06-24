@@ -50,17 +50,23 @@ export default async function AdminPage() {
   since.setDate(since.getDate() - 31);
   const { data: activity } = await supabase
     .from("activity_events")
-    .select("user_id, path, created_at")
+    .select("user_id, path, client_id, created_at")
     .gte("created_at", since.toISOString())
     .order("created_at", { ascending: false })
     .limit(10000);
   const names: Record<string, string> = {};
   for (const u of users) names[u.id] = u.name || u.email;
+  const clientNames: Record<string, string> = {};
+  for (const c of clients) clientNames[c.id] = c.name;
   const events: ActivityEvent[] = (activity ?? []).map((a) => ({
     userId: a.user_id as string,
     path: a.path as string,
+    clientId: (a.client_id as string | null) ?? null,
     at: a.created_at as string,
   }));
+  // Most-recent event per user (events are ordered newest-first).
+  const lastActive: Record<string, string> = {};
+  for (const e of events) if (!lastActive[e.userId]) lastActive[e.userId] = e.at;
 
   // Recent contact-form inquiries (admin-only via RLS).
   const { data: inquiries } = await supabase
@@ -149,7 +155,12 @@ export default async function AdminPage() {
             login, and send password resets.
           </p>
         </div>
-        <AdminUsers users={users} clients={clients} currentUserId={session.user.id} />
+        <AdminUsers
+          users={users}
+          clients={clients}
+          currentUserId={session.user.id}
+          lastActive={lastActive}
+        />
       </section>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
@@ -159,7 +170,7 @@ export default async function AdminPage() {
             Who&apos;s using the portal and what they use most. Pick a range.
           </p>
         </div>
-        <AdminAnalytics events={events} names={names} />
+        <AdminAnalytics events={events} names={names} clientNames={clientNames} />
       </section>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">

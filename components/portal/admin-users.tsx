@@ -28,10 +28,12 @@ export function AdminUsers({
   users,
   clients,
   currentUserId,
+  lastActive = {},
 }: {
   users: AdminUser[];
   clients: Client[];
   currentUserId: string;
+  lastActive?: Record<string, string>;
 }) {
   if (users.length === 0) {
     return <p className="px-6 py-8 text-center text-sm text-muted">No users yet.</p>;
@@ -39,7 +41,13 @@ export function AdminUsers({
   return (
     <ul className="divide-y divide-line">
       {users.map((u) => (
-        <UserRow key={u.id} user={u} clients={clients} isSelf={u.id === currentUserId} />
+        <UserRow
+          key={u.id}
+          user={u}
+          clients={clients}
+          isSelf={u.id === currentUserId}
+          activeAt={lastActive[u.id] ?? null}
+        />
       ))}
     </ul>
   );
@@ -49,10 +57,12 @@ function UserRow({
   user,
   clients,
   isSelf,
+  activeAt,
 }: {
   user: AdminUser;
   clients: Client[];
   isSelf: boolean;
+  activeAt: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -86,6 +96,7 @@ function UserRow({
           </div>
           <p className="mt-0.5 text-xs text-muted-soft">
             {user.email} · last login {last}
+            {activeAt ? ` · last active ${new Date(activeAt).toLocaleString()}` : ""}
           </p>
         </div>
 
