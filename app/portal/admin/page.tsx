@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PortalHeader, PortalShell } from "@/components/portal/ui";
 import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-forms";
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
+import { AdminAnalytics, type ActivityEvent } from "@/components/portal/admin-analytics";
 
 export default async function AdminPage() {
   const session = await requireAdmin();
@@ -43,6 +44,23 @@ export default async function AdminPage() {
       clientIds: clientsByUser.get(u.id) ?? [],
     }))
     .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+
+  // Usage analytics: page-view events for the last 31 days (admin reads all).
+  const since = new Date();
+  since.setDate(since.getDate() - 31);
+  const { data: activity } = await supabase
+    .from("activity_events")
+    .select("user_id, path, created_at")
+    .gte("created_at", since.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(10000);
+  const names: Record<string, string> = {};
+  for (const u of users) names[u.id] = u.name || u.email;
+  const events: ActivityEvent[] = (activity ?? []).map((a) => ({
+    userId: a.user_id as string,
+    path: a.path as string,
+    at: a.created_at as string,
+  }));
 
   // Recent contact-form inquiries (admin-only via RLS).
   const { data: inquiries } = await supabase
@@ -132,6 +150,16 @@ export default async function AdminPage() {
           </p>
         </div>
         <AdminUsers users={users} clients={clients} currentUserId={session.user.id} />
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
+        <div className="border-b border-line px-6 py-4">
+          <h2 className="text-base font-bold text-ink">Usage analytics</h2>
+          <p className="mt-0.5 text-xs text-muted-soft">
+            Who&apos;s using the portal and what they use most. Pick a range.
+          </p>
+        </div>
+        <AdminAnalytics events={events} names={names} />
       </section>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">

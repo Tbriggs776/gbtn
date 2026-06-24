@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { requireSession, getAccessibleClients } from "@/lib/auth";
 import { PortalNav } from "@/components/portal/portal-nav";
+import { ActivityTracker } from "@/components/portal/activity-tracker";
 
 export const metadata: Metadata = {
   title: "Client Portal",
@@ -27,6 +28,9 @@ export default async function PortalLayout({
         />
       </Suspense>
       <div className="min-w-0">{children}</div>
+      <Suspense fallback={null}>
+        <ActivityTracker />
+      </Suspense>
     </div>
   );
 }
