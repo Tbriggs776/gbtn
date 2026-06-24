@@ -157,6 +157,89 @@ export async function setUserClientsAction(
   };
 }
 
+// Admin: edit a user's name / email / role.
+const updateUserSchema = z.object({
+  userId: z.string().uuid("Invalid user."),
+  fullName: z.string().trim().max(120).optional(),
+  email: z.string().trim().email("Enter a valid email.").optional(),
+  role: z.enum(["admin", "client"]).optional(),
+});
+
+export async function updateUserAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await requireAdmin();
+
+  const parsed = updateUserSchema.safeParse({
+    userId: String(formData.get("userId") ?? ""),
+    fullName: String(formData.get("fullName") ?? "").trim() || undefined,
+    email: String(formData.get("email") ?? "").trim() || undefined,
+    role: (String(formData.get("role") ?? "") || undefined) as "admin" | "client" | undefined,
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+
+  const { userId, fullName, email, role } = parsed.data;
+
+  // Don't let an admin demote themselves (avoid locking out the last admin).
+  if (role === "client" && userId === session.user.id) {
+    return { error: "You can't remove your own admin access." };
+  }
+
+  const admin = createAdminClient();
+
+  // Auth: email + display-name metadata.
+  const authUpdate: {
+    email?: string;
+    email_confirm?: boolean;
+    user_metadata?: { full_name: string };
+  } = {};
+  if (email) {
+    authUpdate.email = email;
+    authUpdate.email_confirm = true; // admin override, no re-confirmation needed
+  }
+  if (fullName !== undefined) authUpdate.user_metadata = { full_name: fullName };
+  if (Object.keys(authUpdate).length > 0) {
+    const { error } = await admin.auth.admin.updateUserById(userId, authUpdate);
+    if (error) return { error: error.message };
+  }
+
+  // Profile: name + role.
+  const profileUpdate: { full_name?: string; role?: string } = {};
+  if (fullName !== undefined) profileUpdate.full_name = fullName;
+  if (role) profileUpdate.role = role;
+  if (Object.keys(profileUpdate).length > 0) {
+    const { error } = await admin.from("profiles").update(profileUpdate).eq("id", userId);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal");
+  return { ok: true, message: "User updated." };
+}
+
+// Admin: permanently remove a user (auth + profile + memberships).
+export async function deleteUserAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await requireAdmin();
+
+  const userId = String(formData.get("userId") ?? "");
+  if (!z.string().uuid().safeParse(userId).success) return { error: "Invalid user." };
+  if (userId === session.user.id) return { error: "You can't remove your own account." };
+
+  const admin = createAdminClient();
+  await admin.from("memberships").delete().eq("user_id", userId);
+  await admin.from("profiles").delete().eq("id", userId);
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/portal/admin");
+  revalidatePath("/portal");
+  return { ok: true, message: "User removed." };
+}
+
 // Admin: email a password-reset link to a user (uses the configured SMTP +
 // branded recovery template).
 const resetSchema = z.object({ email: z.string().email() });

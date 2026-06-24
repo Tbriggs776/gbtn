@@ -6,7 +6,7 @@ import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-form
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 
 export default async function AdminPage() {
-  await requireAdmin();
+  const session = await requireAdmin();
   const clients = await getAccessibleClients();
 
   // Memberships (admin can read all via RLS) → per-client counts + per-user list.
@@ -131,7 +131,7 @@ export default async function AdminPage() {
             login, and send password resets.
           </p>
         </div>
-        <AdminUsers users={users} clients={clients} />
+        <AdminUsers users={users} clients={clients} currentUserId={session.user.id} />
       </section>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
