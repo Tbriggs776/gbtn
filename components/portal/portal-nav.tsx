@@ -15,6 +15,7 @@ const icons = {
   financials: "M4 19V5m0 14h16M8 15l3-4 3 2 4-6",
   marketing: "M3 3v18h18M7 14l3-3 3 3 5-6",
   levers: "M4 8h10M18 8h2M4 16h6M14 16h6M14 6v4M10 14v4",
+  pricing: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
   account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0",
   settings:
     "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
@@ -57,6 +58,7 @@ export function PortalNav({
   // Client-specific tools.
   if (activeClient?.slug === "floor-daddy") {
     items.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers" });
+    items.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing" });
   }
   items.push({ label: "Settings", href: "/portal/settings", icon: "settings" });
   items.push({ label: "Account", href: "/portal/account", icon: "account" });
