@@ -1,22 +1,25 @@
-// Floor Daddy pricing engine. Mirrors the Excel model, solved to closed form
-// (the sheet is circular: commission depends on price depends on commission).
+// Floor Daddy pricing engine — replicates the spreadsheet, including its
+// circular reference, via Excel-style ITERATIVE CALCULATION.
 //
-//   cash       = cost / [(1-gm)(1-warranty) - commission]
-//   financeFee = cash * financeFee%
-//   book       = cash + financeFee        (financed / list price)
-//   commission = cash * commission%        (a cost)
-//   warranty   = cash * warranty%          (a cost)
+//   commission = commission% * cash          (circular: cash depends on this)
+//   warranty   = warranty%   * cash
+//   cash       = (base + commission) / (1 - GM) + warranty
+//   finance    = financeFee% * cash
+//   book       = cash + finance               (everything is listed at BOOK)
 //
-// Cash deal: customer pays `cash` (a cash discount = the finance fee), and the
-// finance fee is NOT a cost. Financed: customer pays `book`, finance fee is a cost.
-// Pure + client-safe.
+// Iterate cash up to MAX_ITER times, stopping when the change is < MAX_DELTA —
+// the same settings as Excel's iterative calculation (100 iterations, 0.001).
+//
+// Gross margin is measured against COGS = base + commission, on net revenue
+// (customer price minus warranty + finance-fee pass-throughs); at full price it
+// equals the GM assumption. Pure + client-safe.
 
 export type Assumptions = {
   commission: number;
   warranty: number;
   gm: number;
   financeFee: number;
-  tiers?: number[]; // legacy (unused in UI; kept for DB compatibility)
+  tiers?: number[]; // legacy, unused
 };
 
 export const DEFAULT_ASSUMPTIONS: Assumptions = {
@@ -28,25 +31,45 @@ export const DEFAULT_ASSUMPTIONS: Assumptions = {
 };
 
 export type PriceResult = {
-  productCost: number; // COGS (sum of cost components)
-  cash: number; // cash sell price
-  financeFee: number; // amount
-  book: number; // financed / list price (cash + finance fee)
-  commission: number; // cost amount
-  warranty: number; // cost amount
+  base: number; // product/labor cost (sum of components)
+  cash: number; // cash sell price (book − finance fee)
+  book: number; // list price (cash + finance fee) — what we quote
+  commission: number; // amount
+  warranty: number; // amount (pass-through)
+  financeFee: number; // amount (pass-through, financed deals)
+  cogs: number; // base + commission
 };
 
-export function priceProduct(cost: number, a: Assumptions): PriceResult {
-  const denom = (1 - a.gm) * (1 - a.warranty) - a.commission;
-  const cash = denom > 0 ? cost / denom : NaN;
+const MAX_ITER = 100;
+const MAX_DELTA = 0.001;
+
+export function priceProduct(base: number, a: Assumptions): PriceResult {
+  const gmDiv = 1 - a.gm;
+  let cash = 0;
+  if (gmDiv > 0) {
+    for (let i = 0; i < MAX_ITER; i++) {
+      const commission = cash * a.commission;
+      const warranty = cash * a.warranty;
+      const next = (base + commission) / gmDiv + warranty;
+      const delta = Math.abs(next - cash);
+      cash = next;
+      if (delta < MAX_DELTA) break;
+    }
+  } else {
+    cash = NaN;
+  }
+
+  const commission = cash * a.commission;
+  const warranty = cash * a.warranty;
   const financeFee = cash * a.financeFee;
   return {
-    productCost: cost,
+    base,
     cash,
-    financeFee,
     book: cash + financeFee,
-    commission: cash * a.commission,
-    warranty: cash * a.warranty,
+    commission,
+    warranty,
+    financeFee,
+    cogs: base + commission,
   };
 }
 

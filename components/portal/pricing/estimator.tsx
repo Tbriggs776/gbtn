@@ -100,17 +100,19 @@ export function PricingEstimator({
 
   function costLine(l: Line) {
     const p = priceProduct(l.product.cost, a);
-    const sellBase = cashDiscount ? p.cash : p.book;
-    const unitSell = sellBase * (1 - discountPct);
-    const financeCost = cashDiscount ? 0 : p.financeFee;
-    const unitCost = p.productCost + p.commission + p.warranty + financeCost;
+    const listUnit = cashDiscount ? p.cash : p.book; // we list at book; cash deal lists at cash
+    const sellUnit = listUnit * (1 - discountPct);
+    const financeCharged = cashDiscount ? 0 : p.financeFee;
+    const netRevUnit = sellUnit - p.warranty - financeCharged;
     return {
       p,
-      unitSell,
-      financeCost,
-      sell: unitSell * l.qty,
-      totalCost: unitCost * l.qty,
-      gp: (unitSell - unitCost) * l.qty,
+      bookLine: p.book * l.qty,
+      sell: sellUnit * l.qty,
+      netRev: netRevUnit * l.qty,
+      cogs: p.cogs * l.qty,
+      warranty: p.warranty * l.qty,
+      finance: financeCharged * l.qty,
+      gp: (netRevUnit - p.cogs) * l.qty,
     };
   }
 
@@ -118,19 +120,25 @@ export function PricingEstimator({
     let book = 0,
       cashSell = 0,
       sell = 0,
-      totalCost = 0;
+      netRev = 0,
+      cogs = 0,
+      warranty = 0,
+      finance = 0;
     for (const l of lines) {
       const c = costLine(l);
       book += c.p.book * l.qty;
       cashSell += c.p.cash * l.qty;
       sell += c.sell;
-      totalCost += c.totalCost;
+      netRev += c.netRev;
+      cogs += c.cogs;
+      warranty += c.warranty;
+      finance += c.finance;
     }
     const cashDiscountAmt = cashDiscount ? book - cashSell : 0;
     const manualDiscountAmt = (book - cashDiscountAmt) * discountPct;
-    const gp = sell - totalCost;
-    const gm = sell > 0 ? (gp / sell) * 100 : null;
-    return { book, cashDiscountAmt, manualDiscountAmt, sell, totalCost, gp, gm };
+    const gp = netRev - cogs;
+    const gm = netRev > 0 ? (gp / netRev) * 100 : null;
+    return { book, cashDiscountAmt, manualDiscountAmt, sell, netRev, cogs, warranty, finance, gp, gm };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, a, cashDiscount, discountPct]);
 
@@ -182,8 +190,8 @@ export function PricingEstimator({
                       <p className="truncate text-[11px] text-muted-soft">{p.supplier} · {p.cat}</p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-ink">{money(r.cash)}</p>
-                      <p className="text-[11px] text-muted-soft">cost {money(r.productCost)}</p>
+                      <p className="text-sm font-semibold text-ink">{money(r.book)}</p>
+                      <p className="text-[11px] text-muted-soft">cost {money(r.base)}</p>
                     </div>
                   </button>
                 );
@@ -205,6 +213,7 @@ export function PricingEstimator({
       {/* Retail estimate */}
       <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
         <h3 className="text-sm font-bold text-ink">Retail estimate</h3>
+        <p className="mt-0.5 text-xs text-muted-soft">Listed at book price.</p>
         {empty ? (
           <p className="py-8 text-center text-sm text-muted-soft">
             Search the catalog above and click a product to add it.
@@ -217,14 +226,14 @@ export function PricingEstimator({
                   <tr className="text-left text-[11px] uppercase tracking-wide text-muted-soft">
                     <th className="pb-2 font-semibold">Item</th>
                     <th className="pb-2 text-right font-semibold">Qty</th>
-                    <th className="pb-2 text-right font-semibold">Unit price</th>
+                    <th className="pb-2 text-right font-semibold">Book price</th>
                     <th className="pb-2 text-right font-semibold">Line total</th>
                     <th className="pb-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.map((l) => {
-                    const c = costLine(l);
+                    const r = priceProduct(l.product.cost, a);
                     return (
                       <tr key={l.product.id} className="border-t border-line">
                         <td className="py-2 pr-2">
@@ -240,8 +249,8 @@ export function PricingEstimator({
                             className="w-16 rounded-md border border-line px-2 py-1 text-right text-sm focus:border-navy-2 focus:outline-none"
                           />
                         </td>
-                        <td className="py-2 text-right tabular-nums text-muted">{money(c.unitSell)}</td>
-                        <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(c.sell)}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{money(r.book)}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(r.book * l.qty)}</td>
                         <td className="py-2 pl-2 text-right">
                           <button onClick={() => removeLine(l.product.id)} className="text-muted-soft hover:text-red-600" aria-label="Remove">
                             ✕
@@ -275,45 +284,47 @@ export function PricingEstimator({
       {/* Job costing */}
       <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
         <h3 className="text-sm font-bold text-ink">Job costing</h3>
-        <p className="mt-0.5 text-xs text-muted-soft">Where the price comes from — and whether you&apos;re really hitting your GM.</p>
+        <p className="mt-0.5 text-xs text-muted-soft">
+          GM is measured on net revenue (price less warranty &amp; finance pass-throughs) vs. product + commission cost.
+        </p>
         {empty ? (
           <p className="py-8 text-center text-sm text-muted-soft">Add products above to see the cost breakdown.</p>
         ) : (
           <>
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wide text-muted-soft">
                     <th className="pb-2 font-semibold">Item / cost breakdown</th>
                     <th className="pb-2 text-right font-semibold">Qty</th>
-                    <th className="pb-2 text-right font-semibold">Job cost</th>
-                    <th className="pb-2 text-right font-semibold">Sell</th>
+                    <th className="pb-2 text-right font-semibold">Cost (COGS)</th>
+                    <th className="pb-2 text-right font-semibold">Net rev</th>
                     <th className="pb-2 text-right font-semibold">GM</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.map((l) => {
                     const c = costLine(l);
-                    const lineGm = c.sell > 0 ? (c.gp / c.sell) * 100 : null;
+                    const lineGm = c.netRev > 0 ? (c.gp / c.netRev) * 100 : null;
                     const comps = Object.entries(l.product.comp ?? {}).filter(([, v]) => v > 0);
                     return (
                       <tr key={l.product.id} className="border-t border-line align-top">
                         <td className="py-2 pr-2">
                           <p className="font-medium text-ink">{l.product.name}</p>
                           <p className="mt-0.5 text-[11px] text-muted-soft">
-                            {comps.map(([k, v]) => `${COMP_LABELS[k] ?? k} ${money(v)}`).join(" · ") || "—"}
+                            {comps.map(([k, v]) => `${COMP_LABELS[k] ?? k} ${money(v)}`).join(" · ") || "—"} · comm {money(c.p.commission)}
                           </p>
                           <p className="text-[11px] text-muted-soft">
-                            + comm {money(c.p.commission)} · warr {money(c.p.warranty)}
-                            {c.financeCost > 0 ? ` · fin ${money(c.financeCost)}` : ""}
+                            pass-through: warr {money(c.p.warranty)}
+                            {c.p.financeFee > 0 ? ` · fin ${money(cashDiscount ? 0 : c.p.financeFee)}` : ""}
                           </p>
                         </td>
-                        <td className="py-2 text-right tabular-nums text-muted">{l.qty}</td>
-                        <td className="py-2 text-right tabular-nums text-muted">{money(c.totalCost)}</td>
-                        <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(c.sell)}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{money(c.cogs)}</td>
+                        <td className="py-2 text-right tabular-nums text-ink">{money(c.netRev)}</td>
                         <td className={`py-2 text-right tabular-nums ${lineGm != null && lineGm < 40 ? "text-red-600" : "text-muted"}`}>
                           {pct(lineGm, 0)}
                         </td>
+                        <td className="py-2 text-right tabular-nums text-muted">{l.qty}</td>
                       </tr>
                     );
                   })}
@@ -323,7 +334,10 @@ export function PricingEstimator({
             <div className="mt-4 border-t-2 border-navy-2/20 pt-4">
               <div className="ml-auto max-w-sm space-y-1.5 text-sm">
                 <Row label="Customer total" value={money(totals.sell)} />
-                <Row label="Total job cost" value={money(totals.totalCost)} sub />
+                <Row label="Less warranty reserve" value={`− ${money(totals.warranty)}`} sub />
+                <Row label="Less finance fee" value={`− ${money(totals.finance)}`} sub />
+                <Row label="Net revenue" value={money(totals.netRev)} />
+                <Row label="Less cost (product + commission)" value={`− ${money(totals.cogs)}`} sub />
                 <Row label="Gross profit" value={money(totals.gp)} strong />
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-sm font-semibold text-ink">Gross margin</span>
