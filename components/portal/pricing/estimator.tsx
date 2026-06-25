@@ -57,7 +57,7 @@ export function PricingEstimator({
   const [cat, setCat] = useState<(typeof CATS)[number]["key"]>("all");
   const [lines, setLines] = useState<Line[]>([]);
   const [cashDiscount, setCashDiscount] = useState(false);
-  const [discountPct, setDiscountPct] = useState(0); // additional manual discount (decimal)
+  const [discountPct, setDiscountPct] = useState(0);
   const [saveState, saveAction, saving] = useActionState(updateAssumptionsAction, initialSave);
 
   useEffect(() => {
@@ -98,7 +98,6 @@ export function PricingEstimator({
   const removeLine = (id: string) =>
     setLines((ls) => ls.filter((l) => l.product.id !== id));
 
-  // Per-line job costing under the current mode (cash vs financed) + discount.
   function costLine(l: Line) {
     const p = priceProduct(l.product.cost, a);
     const sellBase = cashDiscount ? p.cash : p.book;
@@ -107,15 +106,9 @@ export function PricingEstimator({
     const unitCost = p.productCost + p.commission + p.warranty + financeCost;
     return {
       p,
-      qty: l.qty,
       unitSell,
       financeCost,
-      unitCost,
       sell: unitSell * l.qty,
-      productCost: p.productCost * l.qty,
-      commission: p.commission * l.qty,
-      warranty: p.warranty * l.qty,
-      finance: financeCost * l.qty,
       totalCost: unitCost * l.qty,
       gp: (unitSell - unitCost) * l.qty,
     };
@@ -125,42 +118,23 @@ export function PricingEstimator({
     let book = 0,
       cashSell = 0,
       sell = 0,
-      productCost = 0,
-      commission = 0,
-      warranty = 0,
-      finance = 0,
       totalCost = 0;
     for (const l of lines) {
       const c = costLine(l);
       book += c.p.book * l.qty;
       cashSell += c.p.cash * l.qty;
       sell += c.sell;
-      productCost += c.productCost;
-      commission += c.commission;
-      warranty += c.warranty;
-      finance += c.finance;
       totalCost += c.totalCost;
     }
     const cashDiscountAmt = cashDiscount ? book - cashSell : 0;
-    const afterCash = book - cashDiscountAmt;
-    const manualDiscountAmt = afterCash * discountPct;
+    const manualDiscountAmt = (book - cashDiscountAmt) * discountPct;
     const gp = sell - totalCost;
     const gm = sell > 0 ? (gp / sell) * 100 : null;
-    return {
-      book,
-      cashDiscountAmt,
-      manualDiscountAmt,
-      sell,
-      productCost,
-      commission,
-      warranty,
-      finance,
-      totalCost,
-      gp,
-      gm,
-    };
+    return { book, cashDiscountAmt, manualDiscountAmt, sell, totalCost, gp, gm };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, a, cashDiscount, discountPct]);
+
+  const empty = lines.length === 0;
 
   return (
     <div className="space-y-6">
@@ -205,9 +179,7 @@ export function PricingEstimator({
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink">{p.name}</p>
-                      <p className="truncate text-[11px] text-muted-soft">
-                        {p.supplier} · {p.cat}
-                      </p>
+                      <p className="truncate text-[11px] text-muted-soft">{p.supplier} · {p.cat}</p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-semibold text-ink">{money(r.cash)}</p>
@@ -220,104 +192,149 @@ export function PricingEstimator({
           </div>
         </div>
 
-        {/* Estimate + discounts + totals */}
-        <div className="space-y-4">
-          <DiscountCard
-            cashDiscount={cashDiscount}
-            setCashDiscount={setCashDiscount}
-            discountPct={discountPct}
-            setDiscountPct={setDiscountPct}
-            financeFee={a.financeFee}
-          />
+        {/* Discounts */}
+        <DiscountCard
+          cashDiscount={cashDiscount}
+          setCashDiscount={setCashDiscount}
+          discountPct={discountPct}
+          setDiscountPct={setDiscountPct}
+          financeFee={a.financeFee}
+        />
+      </div>
 
-          <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
-            <h3 className="text-sm font-bold text-ink">Job costing</h3>
-            {lines.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-soft">
-                Search the catalog and click a product to add it.
-              </p>
-            ) : (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="text-left text-[11px] uppercase tracking-wide text-muted-soft">
-                      <th className="pb-2 font-semibold">Item / cost breakdown</th>
-                      <th className="pb-2 text-right font-semibold">Qty</th>
-                      <th className="pb-2 text-right font-semibold">Job cost</th>
-                      <th className="pb-2 text-right font-semibold">Sell</th>
-                      <th className="pb-2 text-right font-semibold">GM</th>
-                      <th className="pb-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l) => {
-                      const c = costLine(l);
-                      const lineGm = c.sell > 0 ? (c.gp / c.sell) * 100 : null;
-                      const comps = Object.entries(l.product.comp ?? {}).filter(([, v]) => v > 0);
-                      return (
-                        <tr key={l.product.id} className="border-t border-line align-top">
-                          <td className="py-2 pr-2">
-                            <p className="font-medium text-ink">{l.product.name}</p>
-                            <p className="mt-0.5 text-[11px] text-muted-soft">
-                              {comps.map(([k, v]) => `${COMP_LABELS[k] ?? k} ${money(v)}`).join(" · ") || "—"}
-                            </p>
-                            <p className="text-[11px] text-muted-soft">
-                              + comm {money(c.p.commission)} · warr {money(c.p.warranty)}
-                              {c.financeCost > 0 ? ` · fin ${money(c.financeCost)}` : ""}
-                            </p>
-                          </td>
-                          <td className="py-2 text-right">
-                            <input
-                              type="number"
-                              min={0}
-                              value={l.qty}
-                              onChange={(e) => setQty(l.product.id, Math.max(0, Number(e.target.value)))}
-                              className="w-16 rounded-md border border-line px-2 py-1 text-right text-sm focus:border-navy-2 focus:outline-none"
-                            />
-                          </td>
-                          <td className="py-2 text-right tabular-nums text-muted">{money(c.totalCost)}</td>
-                          <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(c.sell)}</td>
-                          <td className={`py-2 text-right tabular-nums ${lineGm != null && lineGm < 40 ? "text-red-600" : "text-muted"}`}>
-                            {pct(lineGm, 0)}
-                          </td>
-                          <td className="py-2 pl-2 text-right">
-                            <button onClick={() => removeLine(l.product.id)} className="text-muted-soft hover:text-red-600" aria-label="Remove">
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {lines.length > 0 && (
-              <div className="mt-4 border-t-2 border-navy-2/20 pt-4">
-                <div className="ml-auto max-w-sm space-y-1.5 text-sm">
-                  <Row label="Book price (list)" value={money(totals.book)} />
-                  {cashDiscount ? (
-                    <Row label="Cash discount (waives finance fee)" value={`− ${money(totals.cashDiscountAmt)}`} sub />
-                  ) : null}
-                  {discountPct > 0 ? (
-                    <Row label={`Additional discount (${(discountPct * 100).toFixed(0)}%)`} value={`− ${money(totals.manualDiscountAmt)}`} sub />
-                  ) : null}
-                  <Row label="Customer total" value={money(totals.sell)} strong />
-                  <div className="!mt-3 border-t border-line pt-2" />
-                  <Row label="Total job cost" value={money(totals.totalCost)} sub />
-                  <Row label="Gross profit" value={money(totals.gp)} />
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-sm font-semibold text-ink">Gross margin</span>
-                    <span className={`text-lg font-bold ${totals.gm != null && totals.gm < 40 ? "text-red-600" : "text-gradient"}`}>
-                      {pct(totals.gm, 1)}
-                    </span>
-                  </div>
+      {/* Retail estimate */}
+      <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
+        <h3 className="text-sm font-bold text-ink">Retail estimate</h3>
+        {empty ? (
+          <p className="py-8 text-center text-sm text-muted-soft">
+            Search the catalog above and click a product to add it.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-muted-soft">
+                    <th className="pb-2 font-semibold">Item</th>
+                    <th className="pb-2 text-right font-semibold">Qty</th>
+                    <th className="pb-2 text-right font-semibold">Unit price</th>
+                    <th className="pb-2 text-right font-semibold">Line total</th>
+                    <th className="pb-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l) => {
+                    const c = costLine(l);
+                    return (
+                      <tr key={l.product.id} className="border-t border-line">
+                        <td className="py-2 pr-2">
+                          <p className="font-medium text-ink">{l.product.name}</p>
+                          <p className="text-[11px] text-muted-soft">{l.product.supplier} · {l.product.cat}</p>
+                        </td>
+                        <td className="py-2 text-right">
+                          <input
+                            type="number"
+                            min={0}
+                            value={l.qty}
+                            onChange={(e) => setQty(l.product.id, Math.max(0, Number(e.target.value)))}
+                            className="w-16 rounded-md border border-line px-2 py-1 text-right text-sm focus:border-navy-2 focus:outline-none"
+                          />
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-muted">{money(c.unitSell)}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(c.sell)}</td>
+                        <td className="py-2 pl-2 text-right">
+                          <button onClick={() => removeLine(l.product.id)} className="text-muted-soft hover:text-red-600" aria-label="Remove">
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 border-t-2 border-navy-2/20 pt-4">
+              <div className="ml-auto max-w-sm space-y-1.5 text-sm">
+                <Row label="Book price (list)" value={money(totals.book)} />
+                {cashDiscount ? (
+                  <Row label="Cash discount (waives finance fee)" value={`− ${money(totals.cashDiscountAmt)}`} sub />
+                ) : null}
+                {discountPct > 0 ? (
+                  <Row label={`Additional discount (${(discountPct * 100).toFixed(0)}%)`} value={`− ${money(totals.manualDiscountAmt)}`} sub />
+                ) : null}
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-sm font-semibold text-ink">Customer total</span>
+                  <span className="text-lg font-bold text-gradient">{money(totals.sell)}</span>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Job costing */}
+      <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
+        <h3 className="text-sm font-bold text-ink">Job costing</h3>
+        <p className="mt-0.5 text-xs text-muted-soft">Where the price comes from — and whether you&apos;re really hitting your GM.</p>
+        {empty ? (
+          <p className="py-8 text-center text-sm text-muted-soft">Add products above to see the cost breakdown.</p>
+        ) : (
+          <>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-muted-soft">
+                    <th className="pb-2 font-semibold">Item / cost breakdown</th>
+                    <th className="pb-2 text-right font-semibold">Qty</th>
+                    <th className="pb-2 text-right font-semibold">Job cost</th>
+                    <th className="pb-2 text-right font-semibold">Sell</th>
+                    <th className="pb-2 text-right font-semibold">GM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l) => {
+                    const c = costLine(l);
+                    const lineGm = c.sell > 0 ? (c.gp / c.sell) * 100 : null;
+                    const comps = Object.entries(l.product.comp ?? {}).filter(([, v]) => v > 0);
+                    return (
+                      <tr key={l.product.id} className="border-t border-line align-top">
+                        <td className="py-2 pr-2">
+                          <p className="font-medium text-ink">{l.product.name}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-soft">
+                            {comps.map(([k, v]) => `${COMP_LABELS[k] ?? k} ${money(v)}`).join(" · ") || "—"}
+                          </p>
+                          <p className="text-[11px] text-muted-soft">
+                            + comm {money(c.p.commission)} · warr {money(c.p.warranty)}
+                            {c.financeCost > 0 ? ` · fin ${money(c.financeCost)}` : ""}
+                          </p>
+                        </td>
+                        <td className="py-2 text-right tabular-nums text-muted">{l.qty}</td>
+                        <td className="py-2 text-right tabular-nums text-muted">{money(c.totalCost)}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-ink">{money(c.sell)}</td>
+                        <td className={`py-2 text-right tabular-nums ${lineGm != null && lineGm < 40 ? "text-red-600" : "text-muted"}`}>
+                          {pct(lineGm, 0)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-4 border-t-2 border-navy-2/20 pt-4">
+              <div className="ml-auto max-w-sm space-y-1.5 text-sm">
+                <Row label="Customer total" value={money(totals.sell)} />
+                <Row label="Total job cost" value={money(totals.totalCost)} sub />
+                <Row label="Gross profit" value={money(totals.gp)} strong />
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-sm font-semibold text-ink">Gross margin</span>
+                  <span className={`text-lg font-bold ${totals.gm != null && totals.gm < 40 ? "text-red-600" : "text-gradient"}`}>
+                    {pct(totals.gm, 1)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -348,20 +365,21 @@ function DiscountCard({
   return (
     <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
       <h3 className="text-sm font-bold text-ink">Discounts</h3>
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">
-        <label className="flex items-center gap-2 text-sm text-ink">
+      <div className="mt-3 space-y-3">
+        <label className="flex items-start gap-2 text-sm text-ink">
           <input
             type="checkbox"
             checked={cashDiscount}
             onChange={(e) => setCashDiscount(e.target.checked)}
-            className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-100"
+            className="mt-0.5 h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-100"
           />
-          Cash discount (= finance fee, {(financeFee * 100).toFixed(0)}%) — waives the finance cost
+          <span>
+            Cash discount (= finance fee, {(financeFee * 100).toFixed(0)}%)
+            <span className="block text-[11px] text-muted-soft">Customer pays cash price; finance cost drops to $0.</span>
+          </span>
         </label>
         <div className="flex items-center gap-2">
-          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-soft">
-            Additional discount
-          </label>
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-soft">Additional discount</label>
           <input
             type="number"
             min={0}
