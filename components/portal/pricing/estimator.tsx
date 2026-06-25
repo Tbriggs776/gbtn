@@ -89,15 +89,13 @@ export function PricingEstimator({
   const totals = useMemo(() => {
     let cost = 0;
     let cash = 0;
-    const tierTotals = a.tiers.map(() => 0);
     for (const l of lines) {
       const r = priceProduct(l.product.cost, a);
       cost += r.cost * l.qty;
       cash += r.cash * l.qty;
-      r.tiers.forEach((t, i) => (tierTotals[i] += t.book * l.qty));
     }
     const marginPct = cash > 0 ? ((cash - cost) / cash) * 100 : null;
-    return { cost, cash, marginPct, tierTotals };
+    return { cost, cash, marginPct };
   }, [lines, a]);
 
   return (
@@ -227,24 +225,12 @@ export function PricingEstimator({
 
           {/* Totals */}
           {lines.length > 0 && (
-            <div className="mt-4 space-y-3 border-t-2 border-navy-2/20 pt-4">
-              <div className="grid grid-cols-3 gap-3">
+            <div className="mt-4 border-t-2 border-navy-2/20 pt-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Stat label="Total cost" value={money(totals.cost)} />
                 <Stat label="Cash price" value={money(totals.cash)} accent />
+                <Stat label="Book price" value={money(totals.cash * (1 + a.financeFee))} />
                 <Stat label="Blended GM" value={pct(totals.marginPct, 1)} />
-              </div>
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-soft">
-                  Financed (whole job, by program)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {a.tiers.map((t, i) => (
-                    <div key={i} className="rounded-lg border border-line bg-paper-soft px-3 py-1.5">
-                      <span className="text-[11px] text-muted-soft">{(t * 100).toFixed(0)}% · </span>
-                      <span className="text-sm font-semibold text-ink">{money(totals.tierTotals[i])}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             </div>
           )}
@@ -322,9 +308,6 @@ function Assumptions({
       <input type="hidden" name="warranty" value={a.warranty} />
       <input type="hidden" name="gm" value={a.gm} />
       <input type="hidden" name="financeFee" value={a.financeFee} />
-      {a.tiers.map((t, i) => (
-        <input key={i} type="hidden" name="tiers" value={t} />
-      ))}
 
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-ink">Pricing assumptions</h3>
@@ -346,31 +329,6 @@ function Assumptions({
         <PercentInput label="Warranty" value={a.warranty} onChange={(v) => setA({ ...a, warranty: v })} disabled={!isAdmin} />
         <PercentInput label="Target GM" value={a.gm} onChange={(v) => setA({ ...a, gm: v })} disabled={!isAdmin} />
         <PercentInput label="Finance fee" value={a.financeFee} onChange={(v) => setA({ ...a, financeFee: v })} disabled={!isAdmin} />
-        <div>
-          <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-soft">
-            Finance programs
-          </label>
-          <div className="flex gap-2">
-            {a.tiers.map((t, i) => (
-              <div key={i} className="flex items-center">
-                <input
-                  type="number"
-                  step={0.5}
-                  min={0}
-                  max={99}
-                  disabled={!isAdmin}
-                  value={Math.round(t * 1000) / 10}
-                  onChange={(e) => {
-                    const tiers = [...a.tiers];
-                    tiers[i] = Number(e.target.value) / 100;
-                    setA({ ...a, tiers });
-                  }}
-                  className="w-14 rounded-md border border-line px-2 py-1.5 text-right text-sm focus:border-navy-2 focus:outline-none disabled:bg-paper-soft disabled:text-muted"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {saveState.error ? <p className="mt-2 text-sm text-red-600">{saveState.error}</p> : null}

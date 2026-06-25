@@ -14,7 +14,6 @@ const schema = z.object({
   warranty: rate,
   gm: rate,
   financeFee: rate,
-  tiers: z.array(rate).min(1).max(8),
 });
 
 export async function updateAssumptionsAction(
@@ -23,19 +22,12 @@ export async function updateAssumptionsAction(
 ): Promise<PricingState> {
   await requireAdmin();
 
-  const tiers = formData
-    .getAll("tiers")
-    .map(String)
-    .filter((s) => s !== "")
-    .map(Number);
-
   const parsed = schema.safeParse({
     clientId: String(formData.get("clientId") ?? ""),
     commission: formData.get("commission"),
     warranty: formData.get("warranty"),
     gm: formData.get("gm"),
     financeFee: formData.get("financeFee"),
-    tiers,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
@@ -53,7 +45,6 @@ export async function updateAssumptionsAction(
     warranty: d.warranty,
     gm: d.gm,
     finance_fee: d.financeFee,
-    tiers: d.tiers,
     updated_at: new Date().toISOString(),
   });
   if (error) return { error: error.message };
