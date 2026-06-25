@@ -1,19 +1,22 @@
 // Floor Daddy pricing engine. Mirrors the Excel model, solved to closed form
 // (the sheet is circular: commission depends on price depends on commission).
 //
-//   cash  = cost / [(1-gm)(1-warranty) - commission]
-//   book  = cash * (1 + financeFee)
-//   Y     = cost + commission*cash                       (total cost incl. commission)
-//   tierN = Y / [(1-gm)(1-warranty) - tierRate]          (per finance program)
+//   cash       = cost / [(1-gm)(1-warranty) - commission]
+//   financeFee = cash * financeFee%
+//   book       = cash + financeFee        (financed / list price)
+//   commission = cash * commission%        (a cost)
+//   warranty   = cash * warranty%          (a cost)
 //
+// Cash deal: customer pays `cash` (a cash discount = the finance fee), and the
+// finance fee is NOT a cost. Financed: customer pays `book`, finance fee is a cost.
 // Pure + client-safe.
 
 export type Assumptions = {
-  commission: number; // e.g. 0.12
-  warranty: number; // e.g. 0.02
-  gm: number; // target gross margin, e.g. 0.5
-  financeFee: number; // e.g. 0.1
-  tiers: number[]; // finance program commission rates, e.g. [0.1,0.08,0.06,0.03,0.01]
+  commission: number;
+  warranty: number;
+  gm: number;
+  financeFee: number;
+  tiers?: number[]; // legacy (unused in UI; kept for DB compatibility)
 };
 
 export const DEFAULT_ASSUMPTIONS: Assumptions = {
@@ -25,31 +28,26 @@ export const DEFAULT_ASSUMPTIONS: Assumptions = {
 };
 
 export type PriceResult = {
-  cost: number;
-  cash: number; // cash sell price (pre finance fee)
-  cashBook: number; // cash price + finance fee
-  marginPct: number | null; // gross margin on the cash sell price
-  tiers: { rate: number; book: number }[]; // one book price per finance program
+  productCost: number; // COGS (sum of cost components)
+  cash: number; // cash sell price
+  financeFee: number; // amount
+  book: number; // financed / list price (cash + finance fee)
+  commission: number; // cost amount
+  warranty: number; // cost amount
 };
 
 export function priceProduct(cost: number, a: Assumptions): PriceResult {
-  const k = (1 - a.gm) * (1 - a.warranty); // shared denominator base
-  const denomCash = k - a.commission;
-
-  const cash = denomCash > 0 ? cost / denomCash : NaN;
-  const cashBook = cash * (1 + a.financeFee);
-  const y = cost + a.commission * cash;
-
-  const tiers = a.tiers.map((rate) => {
-    const d = k - rate;
-    const tierCash = d > 0 ? y / d : NaN;
-    return { rate, book: tierCash * (1 + a.financeFee) };
-  });
-
-  // Gross margin on the cash sell price (sell − cost) ÷ sell.
-  const marginPct = cash > 0 ? ((cash - cost) / cash) * 100 : null;
-
-  return { cost, cash, cashBook, marginPct, tiers };
+  const denom = (1 - a.gm) * (1 - a.warranty) - a.commission;
+  const cash = denom > 0 ? cost / denom : NaN;
+  const financeFee = cash * a.financeFee;
+  return {
+    productCost: cost,
+    cash,
+    financeFee,
+    book: cash + financeFee,
+    commission: cash * a.commission,
+    warranty: cash * a.warranty,
+  };
 }
 
 export function money(n: number | null | undefined): string {
