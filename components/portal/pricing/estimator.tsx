@@ -62,7 +62,7 @@ export function PricingEstimator({
 
   useEffect(() => {
     let live = true;
-    fetch("/api/pricing/catalog")
+    fetch("/api/pricing/catalog?v=2", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : []))
       .then((d: Product[]) => live && setCatalog(d))
       .catch(() => live && setCatalog([]));
@@ -253,7 +253,7 @@ export function PricingEstimator({
                     {lines.map((l) => {
                       const c = costLine(l);
                       const lineGm = c.sell > 0 ? (c.gp / c.sell) * 100 : null;
-                      const comps = Object.entries(l.product.comp).filter(([, v]) => v > 0);
+                      const comps = Object.entries(l.product.comp ?? {}).filter(([, v]) => v > 0);
                       return (
                         <tr key={l.product.id} className="border-t border-line align-top">
                           <td className="py-2 pr-2">

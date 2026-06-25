@@ -15,6 +15,6 @@ export async function GET() {
   if (!allowed) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   return NextResponse.json(catalog, {
-    headers: { "Cache-Control": "private, max-age=3600" },
+    headers: { "Cache-Control": "private, no-store" },
   });
 }
