@@ -135,8 +135,21 @@ export function OperatingModel() {
   }
 
   return (
-    <div className="levers-tool">
+    <div className="levers-tool levers-print">
       <style>{CSS}</style>
+
+      <div className="pdf-hide" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="font-label inline-flex items-center gap-2 rounded-md bg-gradient-brand px-5 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-cream ring-soft transition-all hover:brightness-110"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
+            <path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Export PDF
+        </button>
+      </div>
 
       <h2>Set the Levers</h2>
       <div className="panel">
@@ -208,7 +221,7 @@ export function OperatingModel() {
         </div>
       </div>
 
-      <h2>The Flow</h2>
+      <h2 className="pdf-break">The Flow</h2>
       <div className="flow">
         <div className="node"><div className="n">{whole(leads)}</div><div className="t">Leads</div></div>
         <div className="conv">{v.book}%</div>
@@ -305,4 +318,22 @@ const CSS = `
 @media(max-width:640px){.levers-tool .flow .conv{width:100%;padding:4px 0}}
 .levers-tool .foot{font-size:12.5px;color:#5b6678;margin-top:10px}
 .levers-tool b.navy{color:var(--lv-navy)}
+@media print {
+  @page { size: letter portrait; margin: 0.45in; }
+  html, body { background:#fff !important; }
+  body * { visibility: hidden !important; }
+  .levers-print, .levers-print * { visibility: visible !important; }
+  .levers-print { position: absolute; left: 0; top: 0; width: 100%; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .pdf-hide { display: none !important; }
+  .pdf-break { break-before: page; }
+  .levers-tool h2 { font-size: 15px; margin: 12px 0 8px; break-after: avoid; }
+  .levers-tool .panel { padding: 10px; }
+  .levers-tool .grp { margin-bottom: 8px; }
+  .levers-tool .pillar { padding: 10px; }
+  .levers-tool .pillar .val { font-size: 26px; }
+  .levers-tool .controls { gap: 6px 18px; }
+  .levers-tool .pillar, .levers-tool .panel, .levers-tool .flow,
+  .levers-tool .verdict, .levers-tool .grp { break-inside: avoid; }
+}
 `;
