@@ -22,8 +22,19 @@ export function PortalHeader({
   );
 }
 
-export function PortalShell({ children }: { children: ReactNode }) {
-  return <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 sm:py-10">{children}</div>;
+export function PortalShell({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  /** Data-dense pages (the Ops boards) need more than the reading-width default. */
+  wide?: boolean;
+}) {
+  return (
+    <div className={`mx-auto ${wide ? "max-w-7xl" : "max-w-5xl"} px-5 py-8 sm:px-8 sm:py-10`}>
+      {children}
+    </div>
+  );
 }
 
 export function EmptyState({
