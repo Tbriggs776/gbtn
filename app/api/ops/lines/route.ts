@@ -39,9 +39,8 @@ export async function GET(req: Request) {
     const lines = await listLinesForCG(clientId, cg);
     return NextResponse.json({ lines });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not load lines." },
-      { status: 500 }
-    );
+    // Detail stays server-side; DB error text names tables and drivers.
+    console.error("ops/lines:", e);
+    return NextResponse.json({ error: "Could not load lines." }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,23 +13,60 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { CycleReport } from "@/lib/ops/cycle";
+import type { CycleJob, CycleReport } from "@/lib/ops/cycle";
 import { MIN_JOBS_FOR_RANK, OUTLIER_DAYS } from "@/lib/ops/cycle";
+import type { CSVValue } from "@/lib/ops/csv";
+import { downloadCSV } from "@/lib/ops/csv";
 import { fmtDate, fmtMonth, money } from "@/lib/ops/format";
-import { Tile } from "./shared";
+import { ExportButton, Tile } from "./shared";
+import { DrilldownDrawer, type DrillColumn, type DrillView } from "./drilldown";
 
 const NAVY = "#11294a";
 const AMBER = "#b3761e";
 const CRIMSON = "#9e2335";
 
-export function SpeedToInstall({ report }: { report: CycleReport }) {
-  const [rep, setRep] = useState("");
+const dateFmt = (v: CSVValue) => fmtDate(typeof v === "string" ? v : null);
+const moneyFmt = (v: CSVValue) => (typeof v === "number" && v ? money(v) : "—");
+
+const JOB_COLS: DrillColumn[] = [
+  { key: "invoiceNum", label: "CG" },
+  { key: "custName", label: "Customer" },
+  { key: "shipCity", label: "City" },
+  { key: "salesperson", label: "Rep" },
+  { key: "measureDate", label: "Measured", format: dateFmt },
+  { key: "orderDate", label: "Ordered", format: dateFmt },
+  { key: "installDate", label: "Installed", format: dateFmt },
+  { key: "days", label: "Days", align: "right" },
+  { key: "value", label: "Value", align: "right", format: moneyFmt },
+];
+
+const jobRows = (list: CycleJob[]) =>
+  list.map((j) => ({
+    invoiceNum: j.invoiceNum,
+    custName: j.custName,
+    shipCity: j.shipCity,
+    salesperson: j.salesperson,
+    measureDate: j.measureDate,
+    orderDate: j.orderDate,
+    installDate: j.installDate,
+    days: j.days,
+    value: Math.round(j.revenue * 100) / 100,
+  }));
+
+export function SpeedToInstall({ report, asOf }: { report: CycleReport; asOf: string }) {
   const m2i = report.measureToInstall;
 
-  const jobs = useMemo(
-    () => (rep ? report.jobs.filter((j) => j.salesperson === rep) : report.jobs),
-    [report.jobs, rep]
-  );
+  // Every clickable number opens this with the jobs behind it. The jobs are
+  // already in the browser (the report is CG-level), so slices are instant.
+  const [drill, setDrill] = useState<DrillView | null>(null);
+  const openJobs = (title: string, subtitle: string, slug: string, list: CycleJob[]) =>
+    setDrill({
+      title,
+      subtitle,
+      filename: `speed-to-install-${slug}-as-of-${asOf}.csv`,
+      columns: JOB_COLS,
+      rows: jobRows(list),
+    });
 
   if (!m2i) {
     return (
@@ -40,7 +77,6 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
   }
 
   const companyMedian = m2i.median;
-  const reps = report.byRep.map((r) => r.salesperson);
 
   return (
     <div className="space-y-5">
@@ -51,8 +87,24 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
           sub={`measure → install · ${m2i.n} completed jobs${
             report.scheduledAhead ? ` · ${report.scheduledAhead} still scheduled` : ""
           }`}
+          onClick={() =>
+            openJobs("All timed jobs", "Every completed job with a measure and an install date.", "all-jobs", report.jobs)
+          }
+          clickTitle="See (and export) every timed job"
         />
-        <Tile label="Slowest 10%" value={`${m2i.p90}d`} sub="p90 — the tail customers remember" />
+        <Tile
+          label="Slowest 10%"
+          value={`${m2i.p90}d`}
+          sub="p90 — the tail customers remember"
+          onClick={() =>
+            openJobs(
+              "Slowest 10%",
+              `Jobs that waited ${m2i.p90} days or more, measure → install.`,
+              "slowest-10pct",
+              report.jobs.filter((j) => j.days >= m2i.p90)
+            )
+          }
+        />
         <Tile
           label="Sold same day"
           value={`${Math.round(report.sameDaySellPct)}%`}
@@ -67,8 +119,36 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
           value={report.outliers.length}
           sub={report.outliers.length ? "jobs — the exception list" : "none"}
           flag={report.outliers.length > 0}
+          onClick={
+            report.outliers.length
+              ? () =>
+                  openJobs(
+                    `Waited over ${OUTLIER_DAYS} days`,
+                    "The exception list, longest first.",
+                    "outliers",
+                    report.outliers
+                  )
+              : undefined
+          }
         />
-        <Tile label="Longest" value={`${m2i.max}d`} sub={report.jobs[0]?.invoiceNum ?? "—"} flag />
+        <Tile
+          label="Longest"
+          value={`${m2i.max}d`}
+          sub={report.jobs[0]?.invoiceNum ?? "—"}
+          flag
+          onClick={
+            report.jobs.length
+              ? () =>
+                  openJobs(
+                    "Longest wait",
+                    `${report.jobs[0].invoiceNum} — ${m2i.max} days, measure → install.`,
+                    "longest",
+                    report.jobs.slice(0, 1)
+                  )
+              : undefined
+          }
+          clickTitle="See this job"
+        />
       </div>
 
       <div className="rounded-lg border border-line bg-white p-4">
@@ -90,7 +170,26 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
         </h3>
         <div className="mt-3 h-[220px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={report.bins} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+            <BarChart
+              data={report.bins}
+              margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
+              style={{ cursor: "pointer" }}
+              onClick={(st) => {
+                // recharts 3 chart clicks carry activeTooltipIndex (a string),
+                // not activePayload — resolve through the bins array.
+                const raw = (st as { activeTooltipIndex?: number | string | null })?.activeTooltipIndex;
+                const idx = raw === null || raw === undefined ? NaN : Number(raw);
+                const b = Number.isInteger(idx) ? report.bins[idx] : undefined;
+                if (!b || b.count === 0) return; // an empty band has nothing to show
+                const hi = Number.isFinite(b.hi) ? b.hi : Infinity;
+                openJobs(
+                  `Waited ${b.label} days`,
+                  "Jobs in this band, measure → install.",
+                  `band-${b.label.replace(/[^0-9a-z+]+/gi, "-")}`,
+                  report.jobs.filter((j) => j.days >= b.lo && j.days < hi)
+                );
+              }}
+            >
               <CartesianGrid stroke="#e7e0d3" strokeDasharray="2 4" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#5a606b" }} stroke="#e7e0d3" />
               <YAxis tick={{ fontSize: 10, fill: "#5a606b" }} stroke="#e7e0d3" width={34} />
@@ -129,7 +228,21 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
         </h3>
         <div className="mt-3 h-[240px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={report.byMonth} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+            <ComposedChart
+              data={report.byMonth}
+              margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+              style={{ cursor: "pointer" }}
+              onClick={(st) => {
+                const mo = (st as { activeLabel?: string })?.activeLabel;
+                if (!mo) return;
+                openJobs(
+                  `Installed ${fmtMonth(`${mo}-01`)}`,
+                  "Jobs whose first install landed in this month.",
+                  `month-${mo}`,
+                  report.jobs.filter((j) => j.installDate.slice(0, 7) === mo)
+                );
+              }}
+            >
               <CartesianGrid stroke="#e7e0d3" strokeDasharray="2 4" vertical={false} />
               <XAxis
                 dataKey="month"
@@ -216,8 +329,26 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
 
       {/* By rep */}
       <div>
-        <h3 className="font-label mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+        <h3 className="font-label mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
           By salesperson
+          <span className="ml-auto">
+            <ExportButton
+              onClick={() =>
+                downloadCSV(
+                  `speed-to-install-by-rep-as-of-${asOf}.csv`,
+                  ["Salesperson", "Jobs", "Median days", "p90 days", "Longest days", "vs company days"],
+                  report.byRep.map((r) => [
+                    r.salesperson,
+                    r.jobs,
+                    r.dist.median,
+                    r.dist.p90,
+                    r.dist.max,
+                    r.jobs < MIN_JOBS_FOR_RANK ? "" : r.dist.median - companyMedian,
+                  ])
+                )
+              }
+            />
+          </span>
         </h3>
         <div className="overflow-x-auto rounded-lg border border-line bg-white">
           <table className="w-full min-w-[640px] border-collapse">
@@ -240,7 +371,19 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
                 const thin = r.jobs < MIN_JOBS_FOR_RANK;
                 const delta = r.dist.median - companyMedian;
                 return (
-                  <tr key={r.salesperson} className="border-b border-line/50 last:border-0 hover:bg-paper-soft">
+                  <tr
+                    key={r.salesperson}
+                    onClick={() =>
+                      openJobs(
+                        r.salesperson,
+                        `${r.jobs} timed job${r.jobs === 1 ? "" : "s"}, median ${r.dist.median}d.`,
+                        `rep-${r.salesperson.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+                        report.jobs.filter((j) => (j.salesperson || "(unassigned)") === r.salesperson)
+                      )
+                    }
+                    title="See this rep's jobs"
+                    className="cursor-pointer border-b border-line/50 last:border-0 hover:bg-paper-soft"
+                  >
                     <td className="px-3 py-1.5 text-xs text-ink">
                       {r.salesperson}
                       {thin ? (
@@ -294,6 +437,17 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
             <span className="rounded-sm border border-crimson px-1 text-[9px] text-crimson">
               {report.outliers.length}
             </span>
+            <span className="ml-auto">
+              <ExportButton
+                onClick={() =>
+                  downloadCSV(
+                    `speed-to-install-outliers-as-of-${asOf}.csv`,
+                    JOB_COLS.map((c) => c.label),
+                    jobRows(report.outliers).map((r) => JOB_COLS.map((c) => r[c.key as keyof typeof r]))
+                  )
+                }
+              />
+            </span>
           </h3>
           <div className="overflow-x-auto rounded-lg border border-line bg-white">
             <table className="w-full min-w-[720px] border-collapse">
@@ -335,11 +489,13 @@ export function SpeedToInstall({ report }: { report: CycleReport }) {
           </div>
           {report.outliers.length > 40 ? (
             <p className="mt-1.5 text-[11px] text-muted-soft">
-              Showing the 40 longest of {report.outliers.length}.
+              Showing the 40 longest of {report.outliers.length} — the drawer and CSV carry all of them.
             </p>
           ) : null}
         </div>
       ) : null}
+
+      <DrilldownDrawer view={drill} onClose={() => setDrill(null)} />
     </div>
   );
 }

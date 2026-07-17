@@ -56,7 +56,7 @@ export default async function SpeedToInstallPage({
         importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
       }`}
     >
-      <SpeedToInstall report={report} />
+      <SpeedToInstall report={report} asOf={asOf} />
 
       <div className="mt-6 max-w-[74ch] space-y-2 text-[11.5px] leading-relaxed text-muted-soft">
         <p>

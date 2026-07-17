@@ -1,24 +1,48 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { LineStatus } from "@/lib/ops/csv-import";
 import type { HygieneReport } from "@/lib/ops/hygiene";
 import { fmtDate, money } from "@/lib/ops/format";
-import { STATUS_COLOR, Tile } from "./shared";
+import { downloadCSV } from "@/lib/ops/csv";
+import { ExportButton, STATUS_COLOR, Tile } from "./shared";
 
 export function StatusHygiene({ report, asOf }: { report: HygieneReport; asOf: string }) {
   const [band, setBand] = useState<string>("");
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<LineStatus | "">("");
 
   const rows = useMemo(() => {
     const b = report.bands.find((x) => x.label === band);
     const needle = q.trim().toLowerCase();
     return report.staleCGs.filter((g) => {
       if (b && !(g.daysSince >= b.lo && g.daysSince < b.hi)) return false;
+      // Match on the CG's WORST status, not "contains": the list's Stalled-at
+      // column shows the worst, so filtering by containment would render rows
+      // whose badge contradicts the active chip.
+      if (statusFilter && g.status !== statusFilter) return false;
       if (needle && !`${g.invoiceNum} ${g.custName} ${g.salesperson}`.toLowerCase().includes(needle))
         return false;
       return true;
     });
-  }, [report.staleCGs, report.bands, band, q]);
+  }, [report.staleCGs, report.bands, band, q, statusFilter]);
+
+  // Exports the FILTERED set — all of it, not just the 60 rows on screen.
+  const exportRows = () =>
+    downloadCSV(
+      `status-hygiene-${asOf}.csv`,
+      ["CG", "Customer", "Rep", "Installed", "Days since install", "Stalled at (worst)", "Lines", "Value"],
+      rows.map((g) => [
+        g.invoiceNum,
+        g.custName,
+        g.salesperson,
+        g.installDate,
+        g.daysSince,
+        g.status,
+        g.lines,
+        Math.round(g.value * 100) / 100,
+      ])
+    );
 
   if (report.staleLines === 0) {
     return (
@@ -42,6 +66,12 @@ export function StatusHygiene({ report, asOf }: { report: HygieneReport; asOf: s
           value={report.staleLines.toLocaleString()}
           sub={`${pct}% of installed material · ${report.staleCGs.length} CGs`}
           flag
+          onClick={() => {
+            setBand("");
+            setQ("");
+            setStatusFilter("");
+          }}
+          clickTitle="Show the full list (clears every filter)"
         />
         <Tile label="Value in limbo" value={money(report.staleValue)} sub="line value on those lines" flag />
         <Tile
@@ -137,15 +167,26 @@ export function StatusHygiene({ report, asOf }: { report: HygieneReport; asOf: s
         <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">
           Stalled at
         </span>
-        {report.byStatus.map((s) => (
-          <span key={s.status} className="inline-flex items-center gap-1.5 text-xs">
-            <span className="h-2 w-2 rounded-sm" style={{ background: STATUS_COLOR[s.status] }} />
-            <span className="font-medium text-ink">{s.status}</span>
-            <span className="tabular-nums text-muted">
-              {s.lines.toLocaleString()} lines · {money(s.value)}
-            </span>
-          </span>
-        ))}
+        {report.byStatus.map((s) => {
+          const on = statusFilter === s.status;
+          return (
+            <button
+              key={s.status}
+              onClick={() => setStatusFilter(on ? "" : s.status)}
+              aria-pressed={on}
+              title={`Show CGs whose worst line is stalled at ${s.status}`}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors ${
+                on ? "border-ink bg-paper-tint" : "border-transparent hover:border-line"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-sm" style={{ background: STATUS_COLOR[s.status] }} />
+              <span className="font-medium text-ink">{s.status}</span>
+              <span className="tabular-nums text-muted">
+                {s.lines.toLocaleString()} lines · {money(s.value)}
+              </span>
+            </button>
+          );
+        })}
         <input
           type="search"
           value={q}
@@ -154,6 +195,7 @@ export function StatusHygiene({ report, asOf }: { report: HygieneReport; asOf: s
           aria-label="Search"
           className="ml-auto min-w-[190px] rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-ink placeholder:text-muted-soft"
         />
+        <ExportButton onClick={exportRows} />
         <span className="text-[11px] tabular-nums text-muted">
           {rows.length} CG{rows.length === 1 ? "" : "s"} ·{" "}
           {money(rows.reduce((a, g) => a + g.value, 0))}

@@ -5,23 +5,16 @@ import { OrdersPipeline } from "@/components/portal/ops/orders-pipeline";
 import { NoOrdersState } from "@/components/portal/ops/empty";
 import { listOrderLines, lastImportedAt } from "@/lib/ops/service";
 import { asOfFrom, bucketOrders, mixOf, type Bucket, type Grain } from "@/lib/ops/pipeline";
+import { LINE_SCOPES, SCOPE_FILTER, type LineScope } from "@/lib/ops/drill";
 import { fmtDate } from "@/lib/ops/format";
 
 const GRAINS: Grain[] = ["day", "week", "month"];
 
-/**
- * Which lines count as a "line". Lives in the URL rather than client state so
- * bucketing stays on the server: CG counts aren't additive across classes (a CG
- * with both material and labor lines would be counted twice), so the buckets
- * can't be summed client-side from per-class sets.
- */
-export type LineScope = "all" | "work" | "material" | "labor";
-const SCOPES: Record<LineScope, (c: string) => boolean> = {
-  all: () => true,
-  work: (c) => c === "material" || c === "labor",
-  material: (c) => c === "material",
-  labor: (c) => c === "labor",
-};
+// Which lines count as a "line". Lives in the URL rather than client state so
+// bucketing stays on the server: CG counts aren't additive across classes (a CG
+// with both material and labor lines would be counted twice), so the buckets
+// can't be summed client-side from per-class sets. The scope vocabulary itself
+// lives in lib/ops/drill so the drill-down API applies the identical filter.
 
 export default async function OrdersPipelinePage({
   searchParams,
@@ -29,9 +22,7 @@ export default async function OrdersPipelinePage({
   searchParams: Promise<{ client?: string; lines?: string }>;
 }) {
   const { client: clientParam, lines: linesParam } = await searchParams;
-  const scope: LineScope = (["all", "work", "material", "labor"] as const).includes(
-    linesParam as LineScope
-  )
+  const scope: LineScope = (LINE_SCOPES as readonly string[]).includes(linesParam ?? "")
     ? (linesParam as LineScope)
     : "all";
   const session = await getSession();
@@ -69,7 +60,7 @@ export default async function OrdersPipelinePage({
   // snapshot date, or the past/future split would shift with the filter.
   const asOf = asOfFrom(lines);
   const mix = mixOf(lines);
-  const scoped = lines.filter((l) => SCOPES[scope](l.lineClass));
+  const scoped = lines.filter((l) => SCOPE_FILTER[scope](l.lineClass));
 
   // All three grains are cheap over ~17k rows, so bucket them once on the server
   // and let the grain toggle switch without a round trip.
@@ -86,7 +77,7 @@ export default async function OrdersPipelinePage({
         importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
       }`}
     >
-      <OrdersPipeline buckets={buckets} asOf={asOf} scope={scope} mix={mix} />
+      <OrdersPipeline buckets={buckets} asOf={asOf} scope={scope} mix={mix} clientId={activeClient.id} />
 
       <div className="mt-6 max-w-[74ch] space-y-2 text-[11.5px] leading-relaxed text-muted-soft">
         <p>

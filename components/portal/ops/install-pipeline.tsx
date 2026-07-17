@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import type { LineStatus } from "@/lib/ops/csv-import";
 import { readinessOf, STATUS_ORDER, type CGSummary, type OrderLine, type PipelineSummary } from "@/lib/ops/pipeline";
 import { fmtDate, money } from "@/lib/ops/format";
-import { StatusBadge, STATUS_COLOR, STATUS_HELP, Tile } from "./shared";
+import { downloadCSV } from "@/lib/ops/csv";
+import { ExportButton, StatusBadge, STATUS_COLOR, STATUS_HELP, Tile } from "./shared";
 
 type Scope = "future" | "past" | "all" | "none";
 type SortKey = "invoice" | "cust" | "city" | "install" | "order" | "lines" | "ready" | LineStatus;
@@ -33,6 +34,49 @@ export function InstallPipeline({
   const [dir, setDir] = useState(1);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [month, setMonth] = useState<string | null>(null);
+  /**
+   * A tile (or calendar day) click filters the board to exactly the CGs that
+   * tile counted — the ids come from the same summarize() pass that produced
+   * the number, so the filtered row count always matches the tile.
+   */
+  const [tileFilter, setTileFilter] = useState<{ label: string; ids: string[] } | null>(null);
+  const tileSet = useMemo(() => (tileFilter ? new Set(tileFilter.ids) : null), [tileFilter]);
+
+  const applyTile = (label: string, ids: string[]) => {
+    if (tileFilter?.label === label) {
+      setTileFilter(null);
+      return;
+    }
+    // Reset the other filters so the board shows the tile's whole set — a
+    // leftover search or rep filter would silently shrink it. Tile sets are
+    // live-and-future by construction, so scope "future" always contains them.
+    setTileFilter({ label, ids });
+    setScope("future");
+    setQ("");
+    setRep("");
+    setMaterialOnly(false);
+    setHideCanceled(true);
+    setStatuses([...STATUS_ORDER]);
+    setView("board");
+  };
+
+  /**
+   * A calendar pick is a navigation, not a toggle: clicking the same day twice
+   * should land on the board both times (the chips promise "open on the
+   * board"). And the picked ids come from whatever the calendar was showing —
+   * possibly including canceled CGs — so unlike tiles, no filter here may
+   * drop a member of the set.
+   */
+  const pickIds = (label: string, ids: string[]) => {
+    setTileFilter({ label, ids });
+    setScope("all");
+    setQ("");
+    setRep("");
+    setMaterialOnly(false);
+    setHideCanceled(false);
+    setStatuses([...STATUS_ORDER]);
+    setView("board");
+  };
   // Line detail is fetched per-CG on expand and cached here for the session.
   const [lines, setLines] = useState<Record<string, OrderLine[] | "loading" | "error">>({});
 
@@ -59,6 +103,7 @@ export function InstallPipeline({
   const base = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return cgs.filter((g) => {
+      if (tileSet && !tileSet.has(g.invoiceNum)) return false;
       if (scope === "future" && !g.hasFuture) return false;
       if (scope === "past" && (g.installDates.length === 0 || g.hasFuture)) return false;
       if (scope === "none" && g.installDates.length > 0) return false;
@@ -71,7 +116,7 @@ export function InstallPipeline({
       }
       return true;
     });
-  }, [cgs, scope, q, rep, hideCanceled, materialOnly]);
+  }, [cgs, scope, q, rep, hideCanceled, materialOnly, tileSet]);
 
   const rows = useMemo(() => {
     const anyOff = statuses.length < STATUS_ORDER.length;
@@ -147,20 +192,53 @@ export function InstallPipeline({
           label="Real work ahead"
           value={summary.realCGs}
           sub={`of ${summary.futureCGs} future CGs · ${summary.serviceOnlyCGs} are promo/fees only`}
+          onClick={summary.realCGs > 0 ? () => applyTile("Real work ahead", summary.ids.realWork) : undefined}
+          active={tileFilter?.label === "Real work ahead"}
+          clickTitle="Filter the board to these CGs"
         />
-        <Tile label="Upcoming revenue" value={money(summary.realRevenue)} sub="material installs only" />
-        <Tile label="Installing ≤ 14 days" value={summary.installingSoon} sub="next two weeks" />
+        <Tile
+          label="Upcoming revenue"
+          value={money(summary.realRevenue)}
+          sub="material installs only"
+          onClick={summary.realCGs > 0 ? () => applyTile("Upcoming revenue", summary.ids.realWork) : undefined}
+          active={tileFilter?.label === "Upcoming revenue"}
+          clickTitle="Filter the board to the CGs behind this revenue"
+        />
+        <Tile
+          label="Installing ≤ 14 days"
+          value={summary.installingSoon}
+          sub="next two weeks"
+          onClick={
+            summary.installingSoon > 0
+              ? () => applyTile("Installing ≤ 14 days", summary.ids.installingSoon)
+              : undefined
+          }
+          active={tileFilter?.label === "Installing ≤ 14 days"}
+          clickTitle="Filter the board to these CGs"
+        />
         <Tile
           label="Material w/o a PO"
           value={summary.noPOLines}
           sub={summary.noPOLines ? `lines · ${summary.noPOCGs} CGs — status None` : "all future material ordered"}
           flag={summary.noPOLines > 0}
+          onClick={
+            summary.noPOLines > 0
+              ? () => applyTile("Material w/o a PO", summary.ids.noPO)
+              : undefined
+          }
+          active={tileFilter?.label === "Material w/o a PO"}
+          clickTitle="Filter the board to these CGs"
         />
         <Tile
           label="Split-date CGs"
           value={summary.mixedCGs}
           sub="part installed, part upcoming"
           flag={summary.mixedCGs > 0}
+          onClick={
+            summary.mixedCGs > 0 ? () => applyTile("Split-date CGs", summary.ids.split) : undefined
+          }
+          active={tileFilter?.label === "Split-date CGs"}
+          clickTitle="Filter the board to these CGs"
         />
       </div>
 
@@ -179,6 +257,16 @@ export function InstallPipeline({
             setMonth(null);
           }}
         />
+
+        {tileFilter ? (
+          <button
+            onClick={() => setTileFilter(null)}
+            title="Clear this filter"
+            className="font-label inline-flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-cream transition-colors hover:bg-ink-soft"
+          >
+            {tileFilter.label} <span aria-hidden="true">✕</span>
+          </button>
+        ) : null}
 
         <div className="flex flex-wrap gap-1.5">
           {STATUS_ORDER.map((s) => {
@@ -235,6 +323,26 @@ export function InstallPipeline({
         />
 
         <div className="ml-auto flex items-center gap-3">
+          <ExportButton
+            onClick={() =>
+              downloadCSV(
+                `install-pipeline-${asOf}.csv`,
+                [
+                  "CG", "Customer", "City", "Rep", "Job type", "Order date", "First install",
+                  "# install dates", "None", "GenPO", "OnOrder", "Cut", "Del", "Resvd",
+                  "Lines", "Delivered %", "Completed", "Value",
+                ],
+                rows.map((g) => [
+                  g.invoiceNum, g.custName, g.shipCity, g.salesperson, g.jobType,
+                  g.orderDate, g.installDate, g.installDates.length,
+                  g.counts.None, g.counts.GenPO, g.counts.OnOrder, g.counts.Cut,
+                  g.counts.Del, g.counts.Resvd, g.total,
+                  Math.round(g.delShare * 100), RLAB[g.ready],
+                  Math.round(g.revenue * 100) / 100,
+                ])
+              )
+            }
+          />
           <span
             className="text-[11px] tabular-nums text-muted"
             title={
@@ -277,7 +385,13 @@ export function InstallPipeline({
           arrow={arrow}
         />
       ) : (
-        <Calendar rows={rows} asOf={asOf} month={month} setMonth={setMonth} />
+        <Calendar
+          rows={rows}
+          asOf={asOf}
+          month={month}
+          setMonth={setMonth}
+          onPick={pickIds}
+        />
       )}
     </div>
   );
@@ -499,11 +613,14 @@ function Calendar({
   asOf,
   month,
   setMonth,
+  onPick,
 }: {
   rows: CGSummary[];
   asOf: string;
   month: string | null;
   setMonth: (m: string) => void;
+  /** Jump to the board filtered to these CGs (a day's installs, or one CG). */
+  onPick: (label: string, ids: string[]) => void;
 }) {
   // Reads the server-side `schedule` rollup (one entry per CG per install day)
   // rather than raw lines — the board never ships lines.
@@ -591,12 +708,19 @@ function Calendar({
             const list = (c.key ? events.get(c.key) : undefined) ?? [];
             const sorted = [...list].sort((a, b) => readinessOf(a.status) - readinessOf(b.status));
             const lines = list.reduce((a, e) => a + e.count, 0);
+            const dayLabel = c.key ? `Installing ${fmtDate(c.key)}` : "";
             return (
               <div
                 key={i}
+                onClick={
+                  list.length
+                    ? () => onPick(dayLabel, sorted.map((e) => e.cg.invoiceNum))
+                    : undefined
+                }
+                title={list.length ? "Open these CGs on the board" : undefined}
                 className={`flex min-h-[92px] flex-col gap-0.5 border-b border-r border-line/50 p-1.5 ${
                   c.pad ? "bg-paper-soft/50" : c.key === asOf ? "bg-paper-tint" : ""
-                }`}
+                } ${list.length ? "cursor-pointer hover:bg-paper-soft/70" : ""}`}
               >
                 <span className="flex items-center justify-between text-[11px] font-semibold tabular-nums text-muted">
                   <span className={c.pad ? "opacity-40" : c.key === asOf ? "text-crimson" : ""}>{c.day}</span>
@@ -605,8 +729,12 @@ function Calendar({
                 {sorted.slice(0, 3).map((e) => (
                   <span
                     key={e.cg.invoiceNum}
-                    title={`${e.cg.invoiceNum} · ${e.cg.custName} · ${e.count} line(s) · weakest: ${e.status}`}
-                    className="truncate rounded-sm border-l-[3px] bg-paper-soft px-1 py-px text-[10.5px] font-semibold tabular-nums"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      onPick(`CG ${e.cg.invoiceNum}`, [e.cg.invoiceNum]);
+                    }}
+                    title={`${e.cg.invoiceNum} · ${e.cg.custName} · ${e.count} line(s) · weakest: ${e.status} — open on the board`}
+                    className="cursor-pointer truncate rounded-sm border-l-[3px] bg-paper-soft px-1 py-px text-[10.5px] font-semibold tabular-nums hover:brightness-105"
                     style={{ borderColor: STATUS_COLOR[e.status], color: STATUS_COLOR[e.status] }}
                   >
                     {e.cg.invoiceNum.replace("CG", "")}{" "}

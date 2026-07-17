@@ -53,6 +53,8 @@ export type StaleCG = {
   value: number;
   /** Worst (earliest-stage) status on the CG — where it actually stalled. */
   status: LineStatus;
+  /** Every pre-receipt status present on the CG, for the "Stalled at" filter. */
+  statuses: LineStatus[];
 };
 
 export type AgeBand = { label: string; lo: number; hi: number; cgs: number; lines: number; value: number };
@@ -127,6 +129,7 @@ export function buildHygieneReport(lines: OrderLine[], asOf: string): HygieneRep
       lines: ls.length,
       value: ls.reduce((a, l) => a + l.value, 0),
       status: worst.status,
+      statuses: [...new Set(ls.map((l) => l.status))],
     });
   }
   staleCGs.sort((a, b) => b.daysSince - a.daysSince);

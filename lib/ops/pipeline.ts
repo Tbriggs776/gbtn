@@ -314,6 +314,18 @@ export type PipelineSummary = {
   noPOLines: number;
   noPOCGs: number;
   mixedCGs: number;
+  /**
+   * The CG ids behind each tile, emitted by the SAME pass that produced the
+   * counts — so a tile click can filter the board to exactly the rows it
+   * counted, never a re-derived approximation that drifts.
+   */
+  ids: {
+    realWork: string[];
+    serviceOnly: string[];
+    installingSoon: string[];
+    noPO: string[];
+    split: string[];
+  };
 };
 
 export function summarize(cgs: CG[], asOf: string, horizonDays = 14): PipelineSummary {
@@ -334,6 +346,9 @@ export function summarize(cgs: CG[], asOf: string, horizonDays = 14): PipelineSu
     }
   }
 
+  const soon = real.filter((g) => g.installDates.some((d) => d > asOf && d <= horizon));
+  const split = live.filter((g) => g.mixed);
+
   return {
     cgTotal: cgs.length,
     lineTotal: cgs.reduce((a, g) => a + g.total, 0),
@@ -341,10 +356,17 @@ export function summarize(cgs: CG[], asOf: string, horizonDays = 14): PipelineSu
     realCGs: real.length,
     serviceOnlyCGs: future.length - real.length,
     realRevenue: real.reduce((a, g) => a + g.revenue, 0),
-    installingSoon: real.filter((g) => g.installDates.some((d) => d > asOf && d <= horizon)).length,
+    installingSoon: soon.length,
     noPOLines: noPO.length,
     noPOCGs: new Set(noPO).size,
-    mixedCGs: live.filter((g) => g.mixed).length,
+    mixedCGs: split.length,
+    ids: {
+      realWork: real.map((g) => g.invoiceNum),
+      serviceOnly: future.filter((g) => g.serviceOnly).map((g) => g.invoiceNum),
+      installingSoon: soon.map((g) => g.invoiceNum),
+      noPO: [...new Set(noPO)],
+      split: split.map((g) => g.invoiceNum),
+    },
   };
 }
 

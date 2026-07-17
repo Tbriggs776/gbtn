@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Bar,
@@ -14,11 +14,43 @@ import {
   YAxis,
 } from "recharts";
 import type { Bucket, Grain, LineMix } from "@/lib/ops/pipeline";
+import type { DrillKind, LineScope } from "@/lib/ops/drill";
+import type { CSVValue } from "@/lib/ops/csv";
+import { downloadCSV } from "@/lib/ops/csv";
 import { fmtDate, fmtMonth, money } from "@/lib/ops/format";
-import { Tile } from "./shared";
+import { ExportButton, Tile } from "./shared";
+import { DrilldownDrawer, type DrillColumn, type DrillDataRow, type DrillView } from "./drilldown";
 
 type Measure = "lines" | "cgs" | "revenue";
-type LineScope = "all" | "work" | "material" | "labor";
+
+// Kinds this page can drill into: the period cells plus the two schedule tiles.
+type PeriodKind = "ordered-period" | "installing-period" | "no-po-period";
+
+const dateFmt = (v: CSVValue) => fmtDate(typeof v === "string" ? v : null);
+const moneyFmt = (v: CSVValue) => (typeof v === "number" ? money(v) : "—");
+
+const BASE_COLS: DrillColumn[] = [
+  { key: "invoiceNum", label: "CG" },
+  { key: "custName", label: "Customer" },
+  { key: "shipCity", label: "City" },
+  { key: "salesperson", label: "Rep" },
+];
+const TAIL_COLS: DrillColumn[] = [
+  { key: "lines", label: "Lines", align: "right" },
+  { key: "value", label: "Value", align: "right", format: moneyFmt },
+];
+const ORDERED_COLS: DrillColumn[] = [
+  ...BASE_COLS,
+  { key: "firstDate", label: "Ordered", format: dateFmt },
+  ...TAIL_COLS,
+];
+const INSTALL_COLS: DrillColumn[] = [
+  ...BASE_COLS,
+  { key: "orderDate", label: "Ordered", format: dateFmt },
+  { key: "firstDate", label: "First install", format: dateFmt },
+  { key: "lastDate", label: "Last install", format: dateFmt },
+  ...TAIL_COLS,
+];
 
 const ORDERED = "#11294a";  // navy — demand coming in
 const INSTALL = "#b3761e";  // amber — load going out
@@ -29,15 +61,69 @@ export function OrdersPipeline({
   asOf,
   scope,
   mix,
+  clientId,
 }: {
   /** Pre-bucketed on the server for each grain, so switching is instant. */
   buckets: Record<Grain, Bucket[]>;
   asOf: string;
   scope: LineScope;
   mix: LineMix;
+  clientId: string;
 }) {
   const [grain, setGrain] = useState<Grain>("week");
   const [measure, setMeasure] = useState<Measure>("lines");
+
+  // ── Drill-down: click a number, get the CGs behind it ─────────────────────
+  // The page ships aggregates only, so slices are fetched from
+  // /api/ops/drilldown, which rebuilds them with the same filters that made
+  // the buckets. `seq` discards stale responses if the user clicks fast.
+  const [drill, setDrill] = useState<DrillView | null>(null);
+  const seq = useRef(0);
+  // A Bar click fires before the chart-level click; this flag lets the bar
+  // claim the click (ordered slice) without the chart also opening installing.
+  const barClaimed = useRef(false);
+
+  const openDrill = (
+    spec: { kind: DrillKind; key?: string },
+    title: string,
+    subtitle: string,
+    columns: DrillColumn[]
+  ) => {
+    const my = ++seq.current;
+    const q = new URLSearchParams({ client: clientId, kind: spec.kind, scope });
+    if (spec.key) {
+      q.set("grain", grain);
+      q.set("key", spec.key);
+    }
+    setDrill({
+      title,
+      subtitle,
+      filename: `${spec.kind}${spec.key ? `-${spec.key}` : ""}-${scope}-as-of-${asOf}.csv`,
+      columns,
+      rows: "loading",
+    });
+    fetch(`/api/ops/drilldown?${q.toString()}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => {
+        if (seq.current === my) setDrill((v) => (v ? { ...v, rows: d.rows as DrillDataRow[] } : v));
+      })
+      .catch(() => {
+        if (seq.current === my) setDrill((v) => (v ? { ...v, rows: "error" } : v));
+      });
+  };
+
+  const scopeWord = { all: "All", work: "Work", material: "Material", labor: "Labor" }[scope];
+
+  const openPeriod = (kind: PeriodKind, key: string) => {
+    const period = labelFor(key, grain, true);
+    if (kind === "ordered-period") {
+      openDrill({ kind, key }, `Ordered — ${period}`, `${scopeWord} lines ordered in this period, grouped by CG.`, ORDERED_COLS);
+    } else if (kind === "installing-period") {
+      openDrill({ kind, key }, `Installing — ${period}`, `${scopeWord} lines installing in this period, grouped by CG.`, INSTALL_COLS);
+    } else {
+      openDrill({ kind, key }, `No PO — ${period}`, "Material lines still at status None, installing in this period.", INSTALL_COLS);
+    }
+  };
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -144,13 +230,40 @@ export function OrdersPipeline({
           label={`Peak install ${grainWord}`}
           value={unit(peak?.installing ?? 0)}
           sub={peak ? `${labelFor(peak.key, grain)} · ${measureWord} installing` : "—"}
+          onClick={peak && peak.installing > 0 ? () => openPeriod("installing-period", peak.key) : undefined}
         />
-        <Tile label="Scheduled ahead" value={backlog.toLocaleString()} sub={`lines installing after ${fmtDate(asOf)}`} />
+        <Tile
+          label="Scheduled ahead"
+          value={backlog.toLocaleString()}
+          sub={`lines installing after ${fmtDate(asOf)}`}
+          onClick={
+            backlog > 0
+              ? () =>
+                  openDrill(
+                    { kind: "scheduled-ahead" },
+                    "Scheduled ahead",
+                    `${scopeWord} lines installing after ${fmtDate(asOf)}, grouped by CG.`,
+                    INSTALL_COLS
+                  )
+              : undefined
+          }
+        />
         <Tile
           label="Scheduled w/o a PO"
           value={futureNoPO.toLocaleString()}
           sub={futureNoPO ? "material lines, status None" : "all scheduled material ordered"}
           flag={futureNoPO > 0}
+          onClick={
+            futureNoPO > 0
+              ? () =>
+                  openDrill(
+                    { kind: "scheduled-no-po" },
+                    "Scheduled w/o a PO",
+                    `Material lines at status None installing after ${fmtDate(asOf)}.`,
+                    INSTALL_COLS
+                  )
+              : undefined
+          }
         />
       </div>
 
@@ -206,7 +319,27 @@ export function OrdersPipeline({
       <div className="rounded-lg border border-line bg-white p-4">
         <div className="h-[340px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+            <ComposedChart
+              data={data}
+              margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+              style={{ cursor: "pointer" }}
+              onClick={(st) => {
+                if (barClaimed.current) {
+                  barClaimed.current = false;
+                  return; // the Bar's own handler already opened the ordered slice
+                }
+                // recharts 3 chart-level clicks carry activeTooltipIndex (as a
+                // STRING, e.g. "44"), not activePayload — resolve through data[].
+                const raw = (st as { activeTooltipIndex?: number | string | null })?.activeTooltipIndex;
+                const idx = raw === null || raw === undefined ? NaN : Number(raw);
+                const d = Number.isInteger(idx) && idx >= 0 && idx < data.length ? data[idx] : undefined;
+                if (!d) return;
+                // Prefer the installing slice (the line); fall back to ordered;
+                // never open a drawer for a period with nothing in it.
+                if (d.raw.installing > 0) openPeriod("installing-period", d.key);
+                else if (d.raw.ordered > 0) openPeriod("ordered-period", d.key);
+              }}
+            >
               <CartesianGrid stroke="#e7e0d3" strokeDasharray="2 4" vertical={false} />
               <XAxis
                 dataKey="label"
@@ -234,7 +367,18 @@ export function OrdersPipeline({
                   fill: INSTALL,
                 }}
               />
-              <Bar dataKey="ordered" fill={ORDERED} radius={[2, 2, 0, 0]} maxBarSize={grain === "day" ? 6 : 26} />
+              <Bar
+                dataKey="ordered"
+                fill={ORDERED}
+                radius={[2, 2, 0, 0]}
+                maxBarSize={grain === "day" ? 6 : 26}
+                onClick={(d) => {
+                  const p = (d as { payload?: { key?: string; raw?: Bucket } })?.payload;
+                  if (!p?.key || !p.raw || p.raw.ordered === 0) return;
+                  barClaimed.current = true;
+                  openPeriod("ordered-period", p.key);
+                }}
+              />
               <Line
                 type="monotone"
                 dataKey="installing"
@@ -260,11 +404,17 @@ export function OrdersPipeline({
               when the export ran, so it&apos;s half-counted — both it and the forward schedule sit out of
               the averages.
             </>
-          ) : null}
+          ) : null}{" "}
+          Click a navy bar for the CGs <span className="font-medium text-ink">ordered</span> that{" "}
+          {grainWord}, anywhere else on a {grainWord} for the CGs{" "}
+          <span className="font-medium text-ink">installing</span> — or use the table below, where each
+          cell opens its own slice.
         </p>
       </div>
 
-      <PeriodTable data={data} grain={grain} />
+      <PeriodTable data={data} grain={grain} scope={scope} asOf={asOf} onCell={openPeriod} />
+
+      <DrilldownDrawer view={drill} onClose={() => setDrill(null)} />
     </div>
   );
 }
@@ -274,9 +424,15 @@ export function OrdersPipeline({
 function PeriodTable({
   data,
   grain,
+  scope,
+  asOf,
+  onCell,
 }: {
   data: { key: string; label: string; raw: Bucket; isFuture: boolean; isPartial: boolean }[];
   grain: Grain;
+  scope: LineScope;
+  asOf: string;
+  onCell: (kind: PeriodKind, key: string) => void;
 }) {
   const [desc, setDesc] = useState(true);
   const rows = useMemo(() => {
@@ -284,7 +440,36 @@ function PeriodTable({
     return desc ? [...r].reverse() : r;
   }, [data, desc]);
 
+  const exportTable = () =>
+    downloadCSV(
+      `orders-pipeline-${grain}-${scope}-as-of-${asOf}.csv`,
+      [
+        grain === "week" ? "Week of" : grain === "month" ? "Month" : "Day",
+        "Lines ordered",
+        "CGs ordered",
+        "Order value",
+        "Lines installing",
+        "CGs installing",
+        "Install value",
+        "Material w/o PO",
+      ],
+      rows.map((d) => [
+        d.key,
+        d.raw.ordered,
+        d.raw.orderedCGs,
+        Math.round(d.raw.orderedRevenue * 100) / 100,
+        d.raw.installing,
+        d.raw.installingCGs,
+        Math.round(d.raw.installingRevenue * 100) / 100,
+        d.raw.installingNoPO,
+      ])
+    );
+
   return (
+    <div>
+    <div className="mb-2 flex items-center justify-end">
+      <ExportButton onClick={exportTable} label={`Export ${grain}s CSV`} />
+    </div>
     <div className="overflow-x-auto rounded-lg border border-line bg-white">
       <table className="w-full min-w-[760px] border-collapse">
         <thead>
@@ -365,17 +550,18 @@ function PeriodTable({
                   </span>
                 ) : null}
               </td>
-              <Num v={d.raw.ordered} border />
-              <Num v={d.raw.orderedCGs} dim />
-              <Num v={d.raw.orderedRevenue} money dim />
-              <Num v={d.raw.installing} border />
-              <Num v={d.raw.installingCGs} dim />
-              <Num v={d.raw.installingRevenue} money dim />
-              <Num v={d.raw.installingNoPO} risk />
+              <Num v={d.raw.ordered} border onClick={d.raw.ordered > 0 ? () => onCell("ordered-period", d.key) : undefined} />
+              <Num v={d.raw.orderedCGs} dim onClick={d.raw.ordered > 0 ? () => onCell("ordered-period", d.key) : undefined} />
+              <Num v={d.raw.orderedRevenue} money dim onClick={d.raw.ordered > 0 ? () => onCell("ordered-period", d.key) : undefined} />
+              <Num v={d.raw.installing} border onClick={d.raw.installing > 0 ? () => onCell("installing-period", d.key) : undefined} />
+              <Num v={d.raw.installingCGs} dim onClick={d.raw.installing > 0 ? () => onCell("installing-period", d.key) : undefined} />
+              <Num v={d.raw.installingRevenue} money dim onClick={d.raw.installing > 0 ? () => onCell("installing-period", d.key) : undefined} />
+              <Num v={d.raw.installingNoPO} risk onClick={d.raw.installingNoPO > 0 ? () => onCell("no-po-period", d.key) : undefined} />
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }
@@ -386,18 +572,22 @@ function Num({
   money: isMoney = false,
   risk = false,
   border = false,
+  onClick,
 }: {
   v: number;
   dim?: boolean;
   money?: boolean;
   risk?: boolean;
   border?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <td
+      onClick={onClick}
+      title={onClick ? "See the CGs behind this number" : undefined}
       className={`px-3 py-1.5 text-right text-xs tabular-nums ${border ? "border-l border-line" : ""} ${
         risk && v > 0 ? "font-semibold text-crimson" : dim ? "text-muted-soft" : "text-ink"
-      }`}
+      } ${onClick ? "cursor-pointer hover:bg-paper-tint" : ""}`}
     >
       {v === 0 ? <span className="text-line">·</span> : isMoney ? money(v) : v.toLocaleString()}
     </td>

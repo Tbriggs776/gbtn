@@ -44,18 +44,24 @@ export function Tile({
   value,
   sub,
   flag = false,
+  onClick,
+  active = false,
+  clickTitle,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   flag?: boolean;
+  /** Makes the tile a drill-through: shows the CGs behind the number. */
+  onClick?: () => void;
+  active?: boolean;
+  clickTitle?: string;
 }) {
-  return (
-    <div
-      className={`flex flex-col gap-0.5 rounded-lg border bg-white px-3.5 py-3 ${
-        flag ? "border-crimson/40" : "border-line"
-      }`}
-    >
+  const frame = `flex flex-col gap-0.5 rounded-lg border bg-white px-3.5 py-3 ${
+    active ? "border-ink bg-paper-tint" : flag ? "border-crimson/40" : "border-line"
+  }`;
+  const inner = (
+    <>
       <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-muted">
         {label}
       </span>
@@ -65,7 +71,43 @@ export function Tile({
         {value}
       </span>
       {sub ? <span className="text-[11px] leading-snug text-muted-soft">{sub}</span> : null}
-    </div>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        title={clickTitle ?? "See the CGs behind this number"}
+        className={`${frame} cursor-pointer text-left transition-colors hover:border-ink/50 hover:shadow-sm`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className={frame}>{inner}</div>;
+}
+
+export function ExportButton({ onClick, label = "Export CSV" }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="font-label inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-white px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted transition-colors hover:border-stone hover:text-ink"
+    >
+      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" aria-hidden="true">
+        <path
+          d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      {label}
+    </button>
   );
 }
 
