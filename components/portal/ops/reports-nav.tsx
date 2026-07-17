@@ -20,6 +20,16 @@ const REPORTS = [
     label: "Orders Pipeline",
     blurb: "Order volume by day, week, and month",
   },
+  {
+    href: "/portal/ops-reports/speed-to-install",
+    label: "Speed to Install",
+    blurb: "How long customers wait, measure to install",
+  },
+  {
+    href: "/portal/ops-reports/status-hygiene",
+    label: "Status Hygiene",
+    blurb: "Material installed but never marked received",
+  },
 ] as const;
 
 export function OpsReportsNav() {

@@ -1,7 +1,6 @@
 import { getSession, getActiveClient } from "@/lib/auth";
 import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui";
-import { OpsReportsNav } from "@/components/portal/ops/reports-nav";
-import { OrdersUploader } from "@/components/portal/ops/uploader";
+import { OpsShell as Shell } from "@/components/portal/ops/shell";
 import { InstallPipeline } from "@/components/portal/ops/install-pipeline";
 import { NoOrdersState } from "@/components/portal/ops/empty";
 import { listOrderLines, lastImportedAt } from "@/lib/ops/service";
@@ -90,31 +89,5 @@ export default async function InstallPipelinePage({
         </p>
       </div>
     </Shell>
-  );
-}
-
-function Shell({
-  client,
-  clientId,
-  subtitle,
-  children,
-}: {
-  client: string;
-  clientId: string;
-  subtitle: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <PortalShell wide>
-      <PortalHeader
-        title="Ops Reports"
-        subtitle={`${client} · ${subtitle}`}
-        actions={<OrdersUploader clientId={clientId} />}
-      />
-      <div className="mt-4">
-        <OpsReportsNav />
-      </div>
-      <div className="mt-6">{children}</div>
-    </PortalShell>
   );
 }
