@@ -121,26 +121,29 @@ export function OrdersPipeline({
 
   const unit = (n: number) => (measure === "revenue" ? money(n) : Math.round(n).toLocaleString());
   const grainWord = { day: "day", week: "week", month: "month" }[grain];
+  // The measure toggle changes what every number on this page counts, so the
+  // labels have to say which — a bare "47" invites reading a CG count as lines.
+  const measureWord = { lines: "lines", cgs: "CGs", revenue: "value" }[measure];
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         <Tile
-          label={`Avg ordered / ${grainWord}`}
+          label={`Avg ${measureWord} ordered / ${grainWord}`}
           value={unit(avgOrdered)}
           sub={`${complete.length} complete ${grainWord}${complete.length === 1 ? "" : "s"}${
             partial ? ` · this ${grainWord} still open` : ""
           }`}
         />
         <Tile
-          label={`Avg installing / ${grainWord}`}
+          label={`Avg ${measureWord} installing / ${grainWord}`}
           value={unit(avgInstalling)}
           sub="the capacity actually consumed"
         />
         <Tile
           label={`Peak install ${grainWord}`}
           value={unit(peak?.installing ?? 0)}
-          sub={peak ? labelFor(peak.key, grain) : "—"}
+          sub={peak ? `${labelFor(peak.key, grain)} · ${measureWord} installing` : "—"}
         />
         <Tile label="Scheduled ahead" value={backlog.toLocaleString()} sub={`lines installing after ${fmtDate(asOf)}`} />
         <Tile
@@ -283,8 +286,31 @@ function PeriodTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-line bg-white">
-      <table className="w-full min-w-[720px] border-collapse">
+      <table className="w-full min-w-[760px] border-collapse">
         <thead>
+          {/* Two tiers. Both halves have a Lines / CGs / Value column, so a flat
+              header leaves two columns reading just "CGs" and invites comparing
+              ordered CGs against an installing number. The group row is what
+              tells them apart. */}
+          <tr className="bg-paper-soft">
+            <th className="border-b border-line px-3 py-1.5" />
+            <th
+              colSpan={3}
+              className="font-label border-b border-l border-line px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.1em]"
+              style={{ color: ORDERED }}
+            >
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-sm align-middle" style={{ background: ORDERED }} />
+              Ordered — demand in
+            </th>
+            <th
+              colSpan={4}
+              className="font-label border-b border-l border-line px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.1em]"
+              style={{ color: INSTALL }}
+            >
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-sm align-middle" style={{ background: INSTALL }} />
+              Installing — load out
+            </th>
+          </tr>
           <tr className="bg-paper-soft">
             <th
               onClick={() => setDesc((v) => !v)}
@@ -293,18 +319,26 @@ function PeriodTable({
               {grain === "week" ? "Week of" : grain === "month" ? "Month" : "Day"}{" "}
               <span className="text-crimson">{desc ? "▼" : "▲"}</span>
             </th>
-            {["Lines ordered", "CGs", "Order value", "Lines installing", "CGs", "Install value", "No PO"].map(
-              (h, i) => (
-                <th
-                  key={i}
-                  className={`font-label px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] ${
-                    i === 6 ? "text-crimson/70" : "text-muted"
-                  } ${i === 3 ? "border-l border-line" : ""}`}
-                >
-                  {h}
-                </th>
-              )
-            )}
+            {(
+              [
+                ["Lines", true],
+                ["CGs", false],
+                ["Value", false],
+                ["Lines", true],
+                ["CGs", false],
+                ["Value", false],
+                ["No PO", false],
+              ] as const
+            ).map(([h, startsGroup], i) => (
+              <th
+                key={i}
+                className={`font-label px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.08em] ${
+                  i === 6 ? "text-crimson/70" : "text-muted"
+                } ${startsGroup ? "border-l border-line" : ""}`}
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -331,7 +365,7 @@ function PeriodTable({
                   </span>
                 ) : null}
               </td>
-              <Num v={d.raw.ordered} />
+              <Num v={d.raw.ordered} border />
               <Num v={d.raw.orderedCGs} dim />
               <Num v={d.raw.orderedRevenue} money dim />
               <Num v={d.raw.installing} border />
