@@ -2,18 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession, getAccessibleClients } from "@/lib/auth";
+import { assertCapability } from "@/lib/auth";
 import { parseRevenueWorkbook } from "@/lib/marketing/revenue-import";
 import { loadRevenueImport } from "@/lib/marketing/revenue";
 
 export type MarketingState = { ok?: boolean; error?: string; message?: string };
 
+// Membership alone is not enough: without the capability check an ops user
+// could write marketing data they cannot even read.
 async function assertMember(clientId: string): Promise<void> {
-  await requireSession();
-  const clients = await getAccessibleClients();
-  if (!clients.some((c) => c.id === clientId)) {
-    throw new Error("You don't have access to this client.");
-  }
+  await assertCapability(clientId, "marketing");
 }
 
 export async function loadRevenueAction(

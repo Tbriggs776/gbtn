@@ -1,27 +1,45 @@
-import { requireAdmin, getAccessibleClients } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireSession, getAccessibleClients } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PortalHeader, PortalShell } from "@/components/portal/ui";
 import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-forms";
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 import { AdminAnalytics, type ActivityEvent } from "@/components/portal/admin-analytics";
+import { normalizeRole, type ClientRole } from "@/lib/permissions";
 
 export default async function AdminPage() {
-  const session = await requireAdmin();
-  const clients = await getAccessibleClients();
+  const session = await requireSession();
+  const allClients = await getAccessibleClients();
 
-  // Memberships (admin can read all via RLS) → per-client counts + per-user list.
+  // Two audiences share this page:
+  //   • platform admin (Tyler) — every client, plus the platform-only sections
+  //   • client admin        — ONLY the companies where their role is 'admin'
+  const isPlatformAdmin = session.isAdmin;
+  const clients = isPlatformAdmin
+    ? allClients
+    : allClients.filter((c) => session.roles[c.id] === "admin");
+  if (clients.length === 0) redirect("/portal");
+  const scopeIds = new Set(clients.map((c) => c.id));
+
+  // Memberships → per-client counts + per-user list, narrowed to this admin's
+  // companies so a client admin never learns about users outside them.
   const supabase = await createClient();
   const { data: memberships } = await supabase
     .from("memberships")
-    .select("user_id, client_id");
+    .select("user_id, client_id, role");
   const counts = new Map<string, number>();
   const clientsByUser = new Map<string, string[]>();
+  const rolesByUser = new Map<string, Record<string, ClientRole>>();
   for (const m of memberships ?? []) {
+    if (!scopeIds.has(m.client_id)) continue;
     counts.set(m.client_id, (counts.get(m.client_id) ?? 0) + 1);
     const arr = clientsByUser.get(m.user_id) ?? [];
     arr.push(m.client_id);
     clientsByUser.set(m.user_id, arr);
+    const r = rolesByUser.get(m.user_id) ?? {};
+    r[m.client_id] = normalizeRole(m.role);
+    rolesByUser.set(m.user_id, r);
   }
 
   // All auth users (service role) + their profiles, for the user manager.
@@ -42,7 +60,11 @@ export default async function AdminPage() {
       role: profileById.get(u.id)?.role ?? "client",
       lastSignIn: u.last_sign_in_at ?? null,
       clientIds: clientsByUser.get(u.id) ?? [],
+      clientRoles: rolesByUser.get(u.id) ?? {},
     }))
+    // listUsers() is a service-role call and returns EVERY auth user, so a
+    // client admin must be narrowed to people in their own companies.
+    .filter((u) => isPlatformAdmin || u.clientIds.length > 0)
     .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
 
   // Usage analytics: page-view events for the last 31 days (admin reads all).
@@ -86,18 +108,25 @@ export default async function AdminPage() {
     <PortalShell>
       <PortalHeader
         title="Admin"
-        subtitle="Provision clients and invite their team to the portal."
+        subtitle={
+          isPlatformAdmin
+            ? "Provision clients and invite their team to the portal."
+            : `Manage users for ${clients.map((c) => c.name).join(", ")}.`
+        }
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
-          <h2 className="text-base font-bold text-ink">Create a client</h2>
-          <p className="mt-1 mb-5 text-sm text-muted">
-            Each client is an isolated workspace with its own documents and
-            financials.
-          </p>
-          <CreateClientForm />
-        </section>
+      <div className={`mt-8 grid gap-6 ${isPlatformAdmin ? "lg:grid-cols-2" : ""}`}>
+        {/* Creating a workspace is a platform operation, not a client one. */}
+        {isPlatformAdmin ? (
+          <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
+            <h2 className="text-base font-bold text-ink">Create a client</h2>
+            <p className="mt-1 mb-5 text-sm text-muted">
+              Each client is an isolated workspace with its own documents and
+              financials.
+            </p>
+            <CreateClientForm />
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
           <h2 className="text-base font-bold text-ink">Create a user</h2>
@@ -164,6 +193,9 @@ export default async function AdminPage() {
         />
       </section>
 
+      {/* Analytics and inbound inquiries are GBTN-wide, not per-client. */}
+      {isPlatformAdmin ? (
+      <>
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
         <div className="border-b border-line px-6 py-4">
           <h2 className="text-base font-bold text-ink">Usage analytics</h2>
@@ -227,6 +259,8 @@ export default async function AdminPage() {
           </ul>
         )}
       </section>
+      </>
+      ) : null}
     </PortalShell>
   );
 }

@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { Client } from "@/lib/types";
+import { canSeeNav, type ClientRole, type NavKey } from "@/lib/permissions";
 import { ClientSwitcher } from "./client-switcher";
 
-type NavItem = { label: string; href: string; icon: keyof typeof icons };
+type NavItem = { label: string; href: string; icon: keyof typeof icons; key: NavKey };
 
 const icons = {
   overview: "M4 13h6V4H4v9zm0 7h6v-5H4v5zm10 0h6V11h-6v9zm0-16v5h6V4h-6z",
@@ -38,11 +39,14 @@ export function PortalNav({
   clients,
   defaultClientId,
   userEmail,
+  roles,
 }: {
   isAdmin: boolean;
   clients: Client[];
   defaultClientId: string | null;
   userEmail: string;
+  /** clientId -> this user's role there. Empty for platform admins. */
+  roles: Record<string, ClientRole>;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -50,23 +54,28 @@ export function PortalNav({
 
   const activeClientId = searchParams.get("client") ?? defaultClientId;
   const activeClient = clients.find((c) => c.id === activeClientId);
+  const role = activeClientId ? roles[activeClientId] ?? null : null;
 
-  const items: NavItem[] = [
-    { label: "Overview", href: "/portal", icon: "overview" },
-    { label: "Documents", href: "/portal/documents", icon: "documents" },
-    { label: "Financials", href: "/portal/financials", icon: "financials" },
-    { label: "Marketing", href: "/portal/marketing", icon: "marketing" },
-    { label: "Google Ads", href: "/portal/google-ads", icon: "googleAds" },
+  const all: NavItem[] = [
+    { label: "Overview", href: "/portal", icon: "overview", key: "overview" },
+    { label: "Documents", href: "/portal/documents", icon: "documents", key: "documents" },
+    { label: "Financials", href: "/portal/financials", icon: "financials", key: "financials" },
+    { label: "Marketing", href: "/portal/marketing", icon: "marketing", key: "marketing" },
+    { label: "Google Ads", href: "/portal/google-ads", icon: "googleAds", key: "googleAds" },
   ];
   // Client-specific tools.
   if (activeClient?.slug === "floor-daddy") {
-    items.push({ label: "Ops Reports", href: "/portal/ops-reports", icon: "ops" });
-    items.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers" });
-    items.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing" });
+    all.push({ label: "Ops Reports", href: "/portal/ops-reports", icon: "ops", key: "opsReports" });
+    all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
+    all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
   }
-  items.push({ label: "Settings", href: "/portal/settings", icon: "settings" });
-  items.push({ label: "Account", href: "/portal/account", icon: "account" });
-  if (isAdmin) items.push({ label: "Admin", href: "/portal/admin", icon: "admin" });
+  all.push({ label: "Settings", href: "/portal/settings", icon: "settings", key: "settings" });
+  all.push({ label: "Account", href: "/portal/account", icon: "account", key: "account" });
+  all.push({ label: "Admin", href: "/portal/admin", icon: "admin", key: "admin" });
+
+  // The sidebar must offer exactly what the server will honour — same matrix,
+  // same answer — or users get links that bounce them back to /portal.
+  const items = all.filter((i) => canSeeNav(i.key, role, isAdmin));
 
   const isActive = (href: string) =>
     href === "/portal" ? pathname === "/portal" : pathname.startsWith(href);

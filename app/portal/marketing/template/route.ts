@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import { requireSession } from "@/lib/auth";
 
 // Generates the marketing-revenue import template on the fly so it always
-// matches the parser's expected columns (Date / Channel / Revenue). Gated by
-// the portal middleware. Sample rows are illustrative — replace with your data.
+// matches the parser's expected columns (Date / Channel / Revenue).
+//
+// Authenticates itself: middleware only checks that a cookie NAME looks like a
+// Supabase auth cookie, and route handlers never execute the portal layout, so
+// nothing else on this path verifies the session.
 export async function GET() {
+  await requireSession();
   const sample = [
     { Date: "2026-01-08", Channel: "Google Ads", Revenue: 5200 },
     { Date: "2026-01-15", Channel: "Facebook", Revenue: 3100 },

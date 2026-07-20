@@ -1,4 +1,4 @@
-import { getSession, getActiveClient } from "@/lib/auth";
+import { getSession, getActiveClient, requireCapability } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   PortalHeader,
@@ -23,6 +23,9 @@ export default async function FinancialsPage({
   const { client: clientParam } = await searchParams;
   const session = await getSession();
   const activeClient = await getActiveClient(clientParam);
+  // Gate before any data fetch: dashboards read via the service role,
+  // which bypasses RLS, so this is the real enforcement point.
+  if (activeClient) await requireCapability(activeClient.id, "financials");
 
   if (!activeClient) {
     return (

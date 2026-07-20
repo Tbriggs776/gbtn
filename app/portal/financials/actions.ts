@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession, requireAdmin } from "@/lib/auth";
+import { requireSession, requireAdmin, assertCapability } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { parseWorkbook } from "@/lib/financials/parse";
 import { parseMrp } from "@/lib/financials/mrp";
@@ -50,6 +50,14 @@ export async function parseUploadAction(
     return { uploadId: "", columns: [], suggestedColumn: 0, rows: [], error: "Invalid input." };
   }
   const d = parsed.data;
+  // These actions run through the user's client, so RLS already withholds
+  // financial rows from ops/marketing — this makes the intent explicit at the
+  // entry point rather than surfacing as a confusing downstream failure.
+  try {
+    await assertCapability(d.clientId, "financials");
+  } catch {
+    return { uploadId: "", columns: [], suggestedColumn: 0, rows: [], error: "You don't have access to financials for this client." };
+  }
   if (!d.storagePath.startsWith(`${d.clientId}/`)) {
     return { uploadId: "", columns: [], suggestedColumn: 0, rows: [], error: "Path mismatch." };
   }
@@ -147,6 +155,13 @@ export async function confirmUploadAction(
     .eq("id", uploadId)
     .single();
   if (uErr || !upload) return { error: "Upload not found." };
+  // The upload row names its client; confirm the caller may write financials
+  // there before replacing any line items.
+  try {
+    await assertCapability(upload.client_id as string, "financials");
+  } catch {
+    return { error: "You don't have access to financials for this client." };
+  }
 
   // Replace any prior line items for this upload.
   await supabase.from("financial_line_items").delete().eq("upload_id", uploadId);
@@ -329,9 +344,15 @@ export async function deleteUploadAction(
 
   const { data: upload } = await supabase
     .from("financial_uploads")
-    .select("source_path")
+    .select("source_path, client_id")
     .eq("id", uploadId)
     .single();
+  if (!upload) return { error: "Upload not found." };
+  try {
+    await assertCapability(upload.client_id as string, "financials");
+  } catch {
+    return { error: "You don't have access to financials for this client." };
+  }
 
   if (upload?.source_path) {
     await supabase.storage.from(BUCKET).remove([upload.source_path]);

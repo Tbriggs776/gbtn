@@ -1,4 +1,4 @@
-import { getSession, getActiveClient } from "@/lib/auth";
+import { getSession, getActiveClient, requireCapability } from "@/lib/auth";
 import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui";
 import { OpsShell as Shell } from "@/components/portal/ops/shell";
 import { OrdersPipeline } from "@/components/portal/ops/orders-pipeline";
@@ -27,6 +27,9 @@ export default async function OrdersPipelinePage({
     : "all";
   const session = await getSession();
   const activeClient = await getActiveClient(clientParam);
+  // Gate before any data fetch: dashboards read via the service role,
+  // which bypasses RLS, so this is the real enforcement point.
+  if (activeClient) await requireCapability(activeClient.id, "ops");
 
   if (!activeClient) {
     return (

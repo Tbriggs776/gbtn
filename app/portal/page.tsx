@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getSession, getActiveClient } from "@/lib/auth";
+import { getSession, getActiveClient, sessionCan } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui";
 import { buildPeriods } from "@/lib/financials/build";
@@ -135,21 +135,32 @@ export default async function PortalHome({
   }
 
   const supabase = await createClient();
+  // Overview is visible to every role, so the financial snapshot is gated
+  // per-block rather than at the page. RLS would also withhold these rows, but
+  // this page is the one place that reads financial tables without a page-level
+  // guard — make the omission deliberate so a future switch to the service
+  // role (the house pattern elsewhere) can't quietly start printing the P&L to
+  // ops and marketing.
+  const canSeeFinancials = session ? sessionCan(session, activeClient.id, "financials") : false;
   const [{ count: docCount }, { data: uploads }, { data: items }] =
     await Promise.all([
       supabase
         .from("documents")
         .select("*", { count: "exact", head: true })
         .eq("client_id", activeClient.id),
-      supabase
-        .from("financial_uploads")
-        .select("id, period_label, period_end, status")
-        .eq("client_id", activeClient.id)
-        .eq("status", "confirmed"),
-      supabase
-        .from("financial_line_items")
-        .select("statement_type, category, amount, upload_id")
-        .eq("client_id", activeClient.id),
+      canSeeFinancials
+        ? supabase
+            .from("financial_uploads")
+            .select("id, period_label, period_end, status")
+            .eq("client_id", activeClient.id)
+            .eq("status", "confirmed")
+        : Promise.resolve({ data: [] as { id: string; period_label: string; period_end: string | null; status: string }[] }),
+      canSeeFinancials
+        ? supabase
+            .from("financial_line_items")
+            .select("statement_type, category, amount, upload_id")
+            .eq("client_id", activeClient.id)
+        : Promise.resolve({ data: [] as { statement_type: string; category: string; amount: number; upload_id: string }[] }),
     ]);
 
   const uploadLabel = new Map(

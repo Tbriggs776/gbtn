@@ -2,6 +2,7 @@
 
 import { useState, useActionState } from "react";
 import type { Client } from "@/lib/types";
+import { CLIENT_ROLES, ROLE_BLURB, ROLE_LABEL, type ClientRole } from "@/lib/permissions";
 import {
   setUserClientsAction,
   resetUserPasswordAction,
@@ -19,6 +20,8 @@ export type AdminUser = {
   role: string;
   lastSignIn: string | null;
   clientIds: string[];
+  /** clientId -> per-client role (admin/finance/ops/marketing). */
+  clientRoles?: Record<string, ClientRole>;
 };
 
 const field =
@@ -228,18 +231,34 @@ function UserRow({
           {clients.length === 0 ? (
             <p className="text-xs text-muted-soft">No clients yet.</p>
           ) : (
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
+            <div className="flex flex-col gap-2">
               {clients.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    name="clientIds"
-                    value={c.id}
-                    defaultChecked={user.clientIds.includes(c.id)}
-                    className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-100"
-                  />
-                  {c.name}
-                </label>
+                <div key={c.id} className="flex flex-wrap items-center gap-2">
+                  <label className="flex min-w-[190px] items-center gap-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      name="clientIds"
+                      value={c.id}
+                      defaultChecked={user.clientIds.includes(c.id)}
+                      className="h-4 w-4 rounded border-line text-brand-600 focus:ring-brand-100"
+                    />
+                    {c.name}
+                  </label>
+                  {/* Role travels with the same submit; ignored server-side for
+                      any client whose box is unchecked. */}
+                  <select
+                    name={`role:${c.id}`}
+                    defaultValue={user.clientRoles?.[c.id] ?? "finance"}
+                    aria-label={`${c.name} role`}
+                    className="rounded-md border border-line bg-white px-2 py-1 text-xs text-ink focus:border-navy-2 focus:outline-none"
+                  >
+                    {CLIENT_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABEL[r]} — {ROLE_BLURB[r]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ))}
             </div>
           )}

@@ -28,6 +28,7 @@ export default async function PortalLayout({
           clients={clients}
           defaultClientId={clients[0]?.id ?? null}
           userEmail={session.user.email ?? ""}
+          roles={session.roles}
         />
       </Suspense>
       <div className="min-w-0">

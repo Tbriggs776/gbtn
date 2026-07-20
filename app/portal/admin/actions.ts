@@ -3,7 +3,15 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import {
+  requireAdmin,
+  requireSession,
+  assertManages,
+  assertManagesUser,
+  assertCanChangeCredentials,
+  manageableClientIds,
+} from "@/lib/auth";
+import { isClientRole } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -77,7 +85,7 @@ export async function inviteUserAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireSession();
 
   const parsed = createUserSchema.safeParse({
     email: String(formData.get("email") ?? "").trim(),
@@ -90,6 +98,15 @@ export async function inviteUserAction(
   }
 
   const { email, clientId, fullName, password } = parsed.data;
+  // A client admin may only create users into their own companies.
+  try {
+    await assertManages(clientId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not authorized." };
+  }
+  // Role for the new membership; defaults to the least-privileged useful seat.
+  const newRole = String(formData.get("role") ?? "finance");
+  if (!isClientRole(newRole)) return { error: "Pick a valid role." };
   const admin = createAdminClient();
 
   const { data, error } = await admin.auth.admin.createUser({
@@ -111,7 +128,9 @@ export async function inviteUserAction(
 
   const userId = data.user?.id;
   if (userId) {
-    await admin.from("memberships").upsert({ user_id: userId, client_id: clientId });
+    await admin
+      .from("memberships")
+      .upsert({ user_id: userId, client_id: clientId, role: newRole });
   }
 
   revalidatePath("/portal/admin");
@@ -131,7 +150,7 @@ export async function setUserClientsAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireSession();
 
   const parsed = setClientsSchema.safeParse({
     userId: String(formData.get("userId") ?? ""),
@@ -140,15 +159,57 @@ export async function setUserClientsAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   const { userId, clientIds } = parsed.data;
+
+  const scope = await manageableClientIds();
+  if (scope !== "all" && scope.length === 0) return { error: "You don't manage any clients." };
+  // The target user must already be someone this admin manages. Without this,
+  // any uuid could be granted a membership — which then makes them "managed"
+  // and unlocks the credential-change path below. New people come in through
+  // inviteUserAction, which scopes the client instead.
+  try {
+    await assertManagesUser(userId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not authorized." };
+  }
+  // Roles arrive as role:<clientId> fields so one submit can set access AND
+  // the seat type per company. Reject bad input rather than defaulting —
+  // 'finance' carries the financials capability, so failing open here would
+  // quietly hand out the most sensitive seat.
+  const badRole: string[] = [];
+  const roleFor = (clientId: string) => {
+    const v = String(formData.get(`role:${clientId}`) ?? "");
+    if (!isClientRole(v)) {
+      badRole.push(clientId);
+      return "ops" as const;
+    }
+    return v;
+  };
+
   const admin = createAdminClient();
 
-  // Replace the full set: clear, then insert the chosen clients.
-  const { error: delErr } = await admin.from("memberships").delete().eq("user_id", userId);
+  // Only ever rewrite memberships INSIDE this admin's scope. The old code
+  // deleted every membership the user had, so a client admin saving this form
+  // would silently revoke their access at companies it can't even see.
+  const targets = scope === "all" ? clientIds : clientIds.filter((id) => scope.includes(id));
+  if (scope !== "all" && targets.length !== clientIds.length) {
+    return { error: "You can only assign clients you manage." };
+  }
+
+  // Resolve every role BEFORE mutating: the delete below is destructive, so a
+  // bad role must abort the whole submit rather than wipe access first.
+  const resolved = targets.map((client_id) => ({
+    user_id: userId,
+    client_id,
+    role: roleFor(client_id),
+  }));
+  if (badRole.length > 0) return { error: "Pick a valid role for every selected client." };
+
+  const delQuery = admin.from("memberships").delete().eq("user_id", userId);
+  const { error: delErr } = await (scope === "all" ? delQuery : delQuery.in("client_id", scope));
   if (delErr) return { error: delErr.message };
 
-  if (clientIds.length > 0) {
-    const rows = clientIds.map((client_id) => ({ user_id: userId, client_id }));
-    const { error: insErr } = await admin.from("memberships").insert(rows);
+  if (resolved.length > 0) {
+    const { error: insErr } = await admin.from("memberships").insert(resolved);
     if (insErr) return { error: insErr.message };
   }
 
@@ -173,7 +234,7 @@ export async function updateUserAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  const session = await requireAdmin();
+  const session = await requireSession();
 
   const parsed = updateUserSchema.safeParse({
     userId: String(formData.get("userId") ?? ""),
@@ -185,6 +246,24 @@ export async function updateUserAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
   const { userId, fullName, email, role, password } = parsed.data;
+
+  // `role` here is the PLATFORM role (GBTN staff vs client). Granting it would
+  // hand someone every client in the system, so it stays platform-admin-only —
+  // a client admin escalating their own users is the obvious attack.
+  if (role !== undefined && !session.isAdmin) {
+    return { error: "Only GBTN staff can change platform access." };
+  }
+  // Client admins may only edit people inside their companies…
+  try {
+    await assertManagesUser(userId);
+    // …and email/password are the global auth account, so seizing them would
+    // hand over every OTHER company that user belongs to. Stricter gate.
+    if (email !== undefined || password !== undefined) {
+      await assertCanChangeCredentials(userId);
+    }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Not authorized." };
+  }
 
   // Don't let an admin demote themselves (avoid locking out the last admin).
   if (role === "client" && userId === session.user.id) {
@@ -257,14 +336,36 @@ export async function deleteUserAction(
 // branded recovery template).
 const resetSchema = z.object({ email: z.string().email() });
 
+// Client admins can reset passwords for their own people; deleting the auth
+// account outright stays platform-admin-only (the user may belong to companies
+// this admin has no visibility into — removing their membership is the
+// client-admin equivalent, via setUserClientsAction).
 export async function resetUserPasswordAction(
   _prev: ActionState,
   formData: FormData
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireSession();
 
   const parsed = resetSchema.safeParse({ email: String(formData.get("email") ?? "").trim() });
   if (!parsed.success) return { error: "Invalid email." };
+
+  // This action keys off an EMAIL, so without a scope check a client admin
+  // could trigger a reset for any account in the system.
+  const scope = await manageableClientIds();
+  if (scope !== "all") {
+    const adminAuth = createAdminClient();
+    const { data: list } = await adminAuth.auth.admin.listUsers({ perPage: 200 });
+    const target = list?.users.find(
+      (u) => (u.email ?? "").toLowerCase() === parsed.data.email.toLowerCase()
+    );
+    if (!target) return { error: "That user isn't in your companies." };
+    try {
+      // A reset link is a credential change — same stricter gate.
+      await assertCanChangeCredentials(target.id);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Not authorized." };
+    }
+  }
 
   const supabase = await createClient();
   const origin = await getOrigin();

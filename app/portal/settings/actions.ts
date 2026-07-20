@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession, getAccessibleClients } from "@/lib/auth";
+import { assertCapability } from "@/lib/auth";
 import { verifyCallRail } from "@/lib/marketing/callrail";
 import {
   upsertCallRailConnection,
@@ -14,12 +14,10 @@ export type SettingsState = { ok?: boolean; error?: string; message?: string };
 
 // Authorization: the caller must be signed in AND a member of the client they
 // are acting on (admins are members of every client via getAccessibleClients).
+// Membership alone is not enough: without the capability check an ops user
+// could write marketing data they cannot even read.
 async function assertMember(clientId: string): Promise<void> {
-  await requireSession();
-  const clients = await getAccessibleClients();
-  if (!clients.some((c) => c.id === clientId)) {
-    throw new Error("You don't have access to this client.");
-  }
+  await assertCapability(clientId, "marketing");
 }
 
 const callrailSchema = z.object({

@@ -1,4 +1,4 @@
-import { getSession, getActiveClient } from "@/lib/auth";
+import { getSession, getActiveClient, requireCapability } from "@/lib/auth";
 import {
   PortalHeader,
   PortalShell,
@@ -18,6 +18,9 @@ export default async function OperationalLeversPage({
   const { client: clientParam } = await searchParams;
   const session = await getSession();
   const activeClient = await getActiveClient(clientParam);
+  // Gate before any data fetch: dashboards read via the service role,
+  // which bypasses RLS, so this is the real enforcement point.
+  if (activeClient) await requireCapability(activeClient.id, "ops");
 
   if (!activeClient) {
     return (

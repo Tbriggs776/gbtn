@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import type { Client } from "@/lib/types";
+import { CLIENT_ROLES, ROLE_BLURB, ROLE_LABEL } from "@/lib/permissions";
 import {
   createClientAction,
   inviteUserAction,
@@ -112,6 +113,18 @@ export function InviteUserForm({ clients }: { clients: Client[] }) {
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor="role" className={labelClass}>
+          Role
+        </label>
+        <select id="role" name="role" className={fieldClass} defaultValue="finance">
+          {CLIENT_ROLES.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABEL[r]} — {ROLE_BLURB[r]}
             </option>
           ))}
         </select>

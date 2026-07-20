@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession, getAccessibleClients } from "@/lib/auth";
+import { assertCapability } from "@/lib/auth";
 import { listLinesForCG } from "@/lib/ops/service";
 
 /**
@@ -26,11 +26,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    await requireSession();
-    const clients = await getAccessibleClients();
-    if (!clients.some((c) => c.id === clientId)) {
-      return NextResponse.json({ error: "Not authorized." }, { status: 403 });
-    }
+    await assertCapability(clientId, "ops");
   } catch {
     return NextResponse.json({ error: "Not authorized." }, { status: 401 });
   }

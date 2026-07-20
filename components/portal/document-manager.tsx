@@ -20,13 +20,19 @@ function safeName(name: string) {
 export function DocumentManager({
   clientId,
   documents,
+  canUploadFinancials = true,
 }: {
   clientId: string;
   documents: ClientDocument[];
+  /** Roles without the financials capability can't file into that category —
+      RLS would reject the insert, so don't offer it. */
+  canUploadFinancials?: boolean;
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [category, setCategory] = useState<string>("Financials");
+  const [category, setCategory] = useState<string>(
+    canUploadFinancials ? "Financials" : "Other"
+  );
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +106,9 @@ export function DocumentManager({
             onChange={(e) => setCategory(e.target.value)}
             className="rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
           >
-            {DOCUMENT_CATEGORIES.map((c) => (
+            {DOCUMENT_CATEGORIES.filter(
+              (c) => canUploadFinancials || c !== "Financials"
+            ).map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
