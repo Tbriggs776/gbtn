@@ -13,7 +13,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Bucket, Grain, LineMix } from "@/lib/ops/pipeline";
+import type { Bucket, DateWindow, Grain, LineMix } from "@/lib/ops/pipeline";
+import { periodEnd } from "@/lib/ops/pipeline";
 import type { DrillKind, LineScope } from "@/lib/ops/drill";
 import type { CSVValue } from "@/lib/ops/csv";
 import { downloadCSV } from "@/lib/ops/csv";
@@ -62,6 +63,9 @@ export function OrdersPipeline({
   scope,
   mix,
   clientId,
+  window,
+  bounds,
+  ahead,
 }: {
   /** Pre-bucketed on the server for each grain, so switching is instant. */
   buckets: Record<Grain, Bucket[]>;
@@ -69,6 +73,11 @@ export function OrdersPipeline({
   scope: LineScope;
   mix: LineMix;
   clientId: string;
+  window: DateWindow;
+  /** Full data span, so the pickers can't point outside the export. */
+  bounds: { min: string; max: string };
+  /** Forward schedule from the UNWINDOWED set — a snapshot fact, not a period one. */
+  ahead: { lines: number; noPO: number };
 }) {
   const [grain, setGrain] = useState<Grain>("week");
   const [measure, setMeasure] = useState<Measure>("lines");
@@ -95,6 +104,11 @@ export function OrdersPipeline({
       q.set("grain", grain);
       q.set("key", spec.key);
     }
+    // The drawer must reproduce the number that was clicked, so the active
+    // window rides along with the request.
+    if (window.from) q.set("from", window.from);
+    if (window.to) q.set("to", window.to);
+    if (window.basis !== "either") q.set("basis", window.basis);
     setDrill({
       title,
       subtitle,
@@ -129,14 +143,36 @@ export function OrdersPipeline({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
-  // Line scope re-buckets on the server (CG counts aren't additive across
-  // classes), so it travels in the URL rather than component state.
-  const setScope = (v: string) => {
+  // Line scope and the date window both re-bucket on the server (CG counts
+  // aren't additive), so they travel in the URL rather than component state.
+  const setParams = (next: Record<string, string | null>) => {
     const p = new URLSearchParams(searchParams.toString());
-    if (v === "all") p.delete("lines");
-    else p.set("lines", v);
+    for (const [k, v] of Object.entries(next)) {
+      if (v === null || v === "") p.delete(k);
+      else p.set(k, v);
+    }
     startTransition(() => router.push(`${pathname}?${p.toString()}`, { scroll: false }));
   };
+  const setScope = (v: string) => setParams({ lines: v === "all" ? null : v });
+
+  // Presets are computed from the SNAPSHOT date, not today's clock — the export
+  // is a point in time, so "last 90 days" must mean 90 days before the data
+  // ends or it silently returns nothing on an older file.
+  const preset = (days: number) => {
+    const [y, m, d] = asOf.split("-").map(Number);
+    const start = new Date(y, m - 1, d - days + 1);
+    const iso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+    setParams({ from: iso, to: asOf });
+  };
+  const presetMonth = (offset: number) => {
+    const [y, m] = asOf.split("-").map(Number);
+    const s = new Date(y, m - 1 + offset, 1);
+    const e = new Date(y, m + offset, 0);
+    const f = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    setParams({ from: f(s), to: f(e) });
+  };
+  const windowed = Boolean(window.from || window.to);
 
   const all = buckets[grain];
 
@@ -191,19 +227,17 @@ export function OrdersPipeline({
   const peak = data.reduce((a, d) => (d.installing > a.installing ? d : a), data[0]);
 
   /**
-   * Grain-independent facts, so they're read off the DAY buckets whatever the
-   * toggle says. Deriving them from the selected grain made the month view
-   * report 66 lines ahead where the day view reported 195 — the month bucket
-   * holding the snapshot got discarded whole, taking the rest of its installs
-   * with it.
+   * Snapshot-level facts, computed server-side from the UNWINDOWED set at day
+   * grain. Two reasons they don't come from `buckets` here:
+   *   • grain — deriving them from the selected grain once made the month view
+   *     report 66 lines ahead where day reported 195, because the month bucket
+   *     holding the snapshot got discarded whole.
+   *   • window — the buckets are clipped to the date filter, so a period ending
+   *     before the snapshot would report the backlog as zero. The forward
+   *     schedule exists regardless of which period you're looking at.
    */
-  const { backlog, futureNoPO } = useMemo(() => {
-    const ahead = buckets.day.filter((b) => b.key > asOf);
-    return {
-      backlog: ahead.reduce((a, b) => a + b.installing, 0),
-      futureNoPO: ahead.reduce((a, b) => a + b.installingNoPO, 0),
-    };
-  }, [buckets.day, asOf]);
+  const backlog = ahead.lines;
+  const futureNoPO = ahead.noPO;
 
   const unit = (n: number) => (measure === "revenue" ? money(n) : Math.round(n).toLocaleString());
   const grainWord = { day: "day", week: "week", month: "month" }[grain];
@@ -235,7 +269,7 @@ export function OrdersPipeline({
         <Tile
           label="Scheduled ahead"
           value={backlog.toLocaleString()}
-          sub={`lines installing after ${fmtDate(asOf)}`}
+          sub={`lines installing after ${fmtDate(asOf)}${windowed ? " · all periods" : ""}`}
           onClick={
             backlog > 0
               ? () =>
@@ -251,7 +285,11 @@ export function OrdersPipeline({
         <Tile
           label="Scheduled w/o a PO"
           value={futureNoPO.toLocaleString()}
-          sub={futureNoPO ? "material lines, status None" : "all scheduled material ordered"}
+          sub={
+            futureNoPO
+              ? `material lines, status None${windowed ? " · all periods" : ""}`
+              : "all scheduled material ordered"
+          }
           flag={futureNoPO > 0}
           onClick={
             futureNoPO > 0
@@ -304,6 +342,101 @@ export function OrdersPipeline({
           <Key color={INSTALL} label="Installing (load out)" />
         </div>
       </div>
+
+      {/* Date window */}
+      <div
+        className="flex flex-wrap items-center gap-2 border-b border-line pb-3"
+        style={{ opacity: pending ? 0.5 : 1 }}
+      >
+        <span className="font-label text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-soft">
+          Period
+        </span>
+        <input
+          type="date"
+          value={window.from ?? ""}
+          min={bounds.min}
+          max={bounds.max}
+          onChange={(e) => setParams({ from: e.target.value || null })}
+          aria-label="From date"
+          className="rounded-md border border-line bg-white px-2 py-1 text-xs tabular-nums text-ink"
+        />
+        <span className="text-xs text-muted-soft">→</span>
+        <input
+          type="date"
+          value={window.to ?? ""}
+          min={bounds.min}
+          max={bounds.max}
+          onChange={(e) => setParams({ to: e.target.value || null })}
+          aria-label="To date"
+          className="rounded-md border border-line bg-white px-2 py-1 text-xs tabular-nums text-ink"
+        />
+
+        <span className="ml-1 flex items-center gap-1.5">
+          <span className="font-label text-[10px] uppercase tracking-[0.1em] text-muted-soft">on</span>
+          <Seg
+            options={[
+              ["either", "Either date"],
+              ["order", "Ordered"],
+              ["install", "Installing"],
+            ]}
+            value={window.basis}
+            onChange={(v) => setParams({ basis: v === "either" ? null : v })}
+          />
+        </span>
+
+        <span className="flex flex-wrap items-center gap-1">
+          {([["30d", 30], ["90d", 90], ["12mo", 365]] as const).map(([label, days]) => (
+            <button
+              key={label}
+              onClick={() => preset(days)}
+              className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-muted transition-colors hover:border-stone hover:text-ink"
+            >
+              {label}
+            </button>
+          ))}
+          <button
+            onClick={() => presetMonth(0)}
+            className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-muted transition-colors hover:border-stone hover:text-ink"
+          >
+            This month
+          </button>
+          <button
+            onClick={() => presetMonth(-1)}
+            className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-muted transition-colors hover:border-stone hover:text-ink"
+          >
+            Last month
+          </button>
+          {windowed ? (
+            <button
+              onClick={() => setParams({ from: null, to: null, basis: null })}
+              className="font-label rounded-md bg-ink px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-cream transition-colors hover:bg-ink-soft"
+            >
+              Clear ✕
+            </button>
+          ) : null}
+        </span>
+
+        <span className="ml-auto text-[11px] tabular-nums text-muted">
+          {windowed
+            ? `${fmtDate(window.from ?? bounds.min)} – ${fmtDate(window.to ?? bounds.max)}`
+            : "All time"}
+        </span>
+      </div>
+
+      {windowed && window.basis !== "either" ? (
+        <p className="-mt-2 text-[11px] text-muted-soft">
+          Filtering on the{" "}
+          <span className="font-medium text-ink">
+            {window.basis === "order" ? "order" : "install"}
+          </span>{" "}
+          date, so the{" "}
+          <span className="font-medium text-ink">
+            {window.basis === "order" ? "installing" : "ordered"}
+          </span>{" "}
+          series can extend outside the window — that&apos;s the{" "}
+          {window.basis === "order" ? "lead time on what you sold" : "lead time behind what you installed"}.
+        </p>
+      ) : null}
 
       {scope === "all" && mix.boilerplate > 0 ? (
         <p className="-mt-2 text-[11px] text-muted-soft">
@@ -680,10 +813,3 @@ function labelFor(key: string, grain: Grain, long = false): string {
   return fmtDate(key);
 }
 
-/** Last day covered by the period starting at `key`. */
-function periodEnd(key: string, grain: Grain): string {
-  if (grain === "day") return key;
-  const [y, m, d] = key.split("-").map(Number);
-  const dt = grain === "week" ? new Date(y, m - 1, d + 6) : new Date(y, m, 0);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-}

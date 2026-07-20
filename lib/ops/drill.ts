@@ -1,6 +1,6 @@
 import type { LineClass } from "./pc";
-import type { Grain, OrderLine } from "./pipeline";
-import { bucketKey, isCanceled, isMaterial } from "./pipeline";
+import type { DateWindow, Grain, OrderLine } from "./pipeline";
+import { bucketKey, inWindow, isCanceled, isMaterial, OPEN_WINDOW } from "./pipeline";
 
 /**
  * Drill-down slices: the CGs behind a number on the Orders Pipeline.
@@ -82,7 +82,18 @@ function matcherFor(spec: DrillSpec, asOf: string): (l: OrderLine) => string | n
   }
 }
 
-export function buildDrillRows(lines: OrderLine[], spec: DrillSpec, asOf: string): DrillRow[] {
+export function buildDrillRows(
+  lines: OrderLine[],
+  spec: DrillSpec,
+  asOf: string,
+  /**
+   * The report's active date window. A drill list is only trustworthy if it
+   * reproduces the aggregate it came from, so the window has to be applied
+   * here too — otherwise clicking a filtered cell returns rows the cell never
+   * counted.
+   */
+  window: DateWindow = OPEN_WINDOW
+): DrillRow[] {
   const match = matcherFor(spec, asOf);
   const by = new Map<
     string,
@@ -92,6 +103,7 @@ export function buildDrillRows(lines: OrderLine[], spec: DrillSpec, asOf: string
   for (const l of lines) {
     if (isCanceled(l.jobType)) continue; // mirrors bucketOrders' default
     if (!SCOPE_FILTER[spec.scope](l.lineClass)) continue;
+    if (!inWindow(l, window)) continue;
     const d = match(l);
     if (d === null) continue;
     let g = by.get(l.invoiceNum);

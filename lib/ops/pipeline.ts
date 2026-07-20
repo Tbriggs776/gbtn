@@ -189,6 +189,83 @@ export function rollUpCGs(lines: OrderLine[], asOf: string): CG[] {
 
 export type Grain = "day" | "week" | "month";
 
+// ── Date window ──────────────────────────────────────────────────────────────
+
+/**
+ * Which date a range filter applies to. The report carries TWO clocks, so
+ * "show me Q2" is ambiguous until you say which one:
+ *
+ *   order    lines ORDERED in the window — a cohort: what did we sell then,
+ *            and when does it install? The install series can run past the
+ *            window's end, which is the point.
+ *   install  lines INSTALLING in the window — the crew's actual load, and
+ *            when that work was sold (the ordered series runs earlier).
+ *   either   a line counts if either date lands in the window. The plain
+ *            "just show me this period" reading, and the default.
+ */
+export type DateBasis = "order" | "install" | "either";
+export const DATE_BASES = ["either", "order", "install"] as const;
+
+export type DateWindow = { from: string | null; to: string | null; basis: DateBasis };
+export const OPEN_WINDOW: DateWindow = { from: null, to: null, basis: "either" };
+
+const hits = (d: string | null, from: string | null, to: string | null): boolean =>
+  d !== null && (!from || d >= from) && (!to || d <= to);
+
+export function inWindow(l: OrderLine, w: DateWindow): boolean {
+  if (!w.from && !w.to) return true;
+  const o = hits(l.orderDate, w.from, w.to);
+  const i = hits(l.installDate, w.from, w.to);
+  if (w.basis === "order") return o;
+  if (w.basis === "install") return i;
+  return o || i;
+}
+
+export function applyWindow(lines: OrderLine[], w: DateWindow): OrderLine[] {
+  if (!w.from && !w.to) return lines;
+  return lines.filter((l) => inWindow(l, w));
+}
+
+/** 'YYYY-MM-DD' or null — rejects anything else so a bad param can't widen a query. */
+export function parseDateParam(v: string | undefined | null): string | null {
+  return v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+}
+
+/** Last day covered by the period starting at `key`. */
+export function periodEnd(key: string, grain: Grain): string {
+  if (grain === "day") return key;
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = grain === "week" ? new Date(y, m - 1, d + 6) : new Date(y, m, 0);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Trim the buckets to the window's own span.
+ *
+ * A line still counts on BOTH of its dates, so filtering to (say) 90 days of
+ * orders leaves lines whose install lands a year later — and bucketOrders
+ * gap-fills between the first and last, producing a two-year axis of mostly
+ * empty periods and averages divided by 110 weeks instead of 13.
+ *
+ * How far to trim depends on which clock the user filtered:
+ *   either   clip both ends — a plain period review
+ *   order    keep the tail: the whole point is seeing WHEN this cohort installs
+ *   install  keep the head: the whole point is seeing when that work was sold
+ */
+export function clipBuckets<T extends { key: string }>(
+  buckets: T[],
+  grain: Grain,
+  w: DateWindow
+): T[] {
+  if (!w.from && !w.to) return buckets;
+  const lo = w.basis === "install" ? null : w.from;
+  const hi = w.basis === "order" ? null : w.to;
+  if (!lo && !hi) return buckets;
+  // Keep a period if it OVERLAPS the range — a month bucket keyed to the 1st
+  // must survive a window starting mid-month.
+  return buckets.filter((b) => (!hi || b.key <= hi) && (!lo || periodEnd(b.key, grain) >= lo));
+}
+
 /**
  * Period key a date falls in. Built by string surgery where possible so no
  * Date object — and therefore no timezone — can shift a day across a boundary.
