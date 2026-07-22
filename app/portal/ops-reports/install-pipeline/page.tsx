@@ -5,7 +5,7 @@ import { InstallPipeline } from "@/components/portal/ops/install-pipeline";
 import { NoOrdersState } from "@/components/portal/ops/empty";
 import { listOrderLines, lastImportedAt } from "@/lib/ops/service";
 import { asOfFrom, mixOf, rollUpCGs, summarize, toSummary } from "@/lib/ops/pipeline";
-import { fmtDate } from "@/lib/ops/format";
+import { fmtDate, fmtImported } from "@/lib/ops/format";
 
 export default async function InstallPipelinePage({
   searchParams,
@@ -59,7 +59,7 @@ export default async function InstallPipelinePage({
       client={activeClient.name}
       clientId={activeClient.id}
       subtitle={`${summary.cgTotal.toLocaleString()} CGs · ${summary.lineTotal.toLocaleString()} lines (${mix.material.toLocaleString()} material · ${mix.labor.toLocaleString()} labor · ${mix.other.toLocaleString()} promo/fees) · as of ${fmtDate(asOf)}${
-        importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
+        importedAt ? ` · imported ${fmtImported(importedAt)}` : ""
       }`}
     >
       <InstallPipeline cgs={rows} summary={summary} asOf={asOf} clientId={activeClient.id} />

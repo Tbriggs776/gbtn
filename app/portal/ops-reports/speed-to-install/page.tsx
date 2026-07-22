@@ -6,7 +6,7 @@ import { NoOrdersState } from "@/components/portal/ops/empty";
 import { listOrderLines, lastImportedAt } from "@/lib/ops/service";
 import { buildCycleReport } from "@/lib/ops/cycle";
 import { asOfFrom } from "@/lib/ops/pipeline";
-import { fmtDate } from "@/lib/ops/format";
+import { fmtDate, fmtImported } from "@/lib/ops/format";
 
 export default async function SpeedToInstallPage({
   searchParams,
@@ -56,7 +56,7 @@ export default async function SpeedToInstallPage({
       client={activeClient.name}
       clientId={activeClient.id}
       subtitle={`speed to install · ${report.jobs.length.toLocaleString()} jobs · as of ${fmtDate(asOf)}${
-        importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
+        importedAt ? ` · imported ${fmtImported(importedAt)}` : ""
       }`}
     >
       <SpeedToInstall report={report} asOf={asOf} />

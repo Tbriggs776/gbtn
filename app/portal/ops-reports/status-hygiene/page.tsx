@@ -6,7 +6,7 @@ import { NoOrdersState } from "@/components/portal/ops/empty";
 import { listOrderLines, lastImportedAt } from "@/lib/ops/service";
 import { buildHygieneReport } from "@/lib/ops/hygiene";
 import { asOfFrom } from "@/lib/ops/pipeline";
-import { fmtDate } from "@/lib/ops/format";
+import { fmtDate, fmtImported } from "@/lib/ops/format";
 
 export default async function StatusHygienePage({
   searchParams,
@@ -56,7 +56,7 @@ export default async function StatusHygienePage({
       client={activeClient.name}
       clientId={activeClient.id}
       subtitle={`status hygiene · ${report.staleCGs.length.toLocaleString()} CGs to clear · as of ${fmtDate(asOf)}${
-        importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
+        importedAt ? ` · imported ${fmtImported(importedAt)}` : ""
       }`}
     >
       <StatusHygiene report={report} asOf={asOf} />

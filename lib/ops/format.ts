@@ -21,3 +21,14 @@ export function fmtMonth(d: string): string {
 export function money(n: number): string {
   return `$${Math.round(n).toLocaleString("en-US")}`;
 }
+
+/**
+ * imported_at is a real instant, not a date string, so it has to be rendered in
+ * a stated timezone. These pages render on the server, and Vercel runs in UTC —
+ * so an import done at 4pm in Arizona came back stamped the following day.
+ * Pinned to Phoenix (the client's timezone, and no DST to reason about) rather
+ * than the server's, so the header agrees with the person who clicked import.
+ */
+export function fmtImported(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { timeZone: "America/Phoenix" });
+}

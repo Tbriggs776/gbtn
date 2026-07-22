@@ -18,7 +18,7 @@ import {
   type Grain,
 } from "@/lib/ops/pipeline";
 import { LINE_SCOPES, SCOPE_FILTER, type LineScope } from "@/lib/ops/drill";
-import { fmtDate } from "@/lib/ops/format";
+import { fmtDate, fmtImported } from "@/lib/ops/format";
 
 const GRAINS: Grain[] = ["day", "week", "month"];
 
@@ -124,7 +124,7 @@ export default async function OrdersPipelinePage({
       client={activeClient.name}
       clientId={activeClient.id}
       subtitle={`capacity planning · ${scoped.length.toLocaleString()} of ${lines.length.toLocaleString()} lines · as of ${fmtDate(asOf)}${
-        importedAt ? ` · imported ${new Date(importedAt).toLocaleDateString("en-US")}` : ""
+        importedAt ? ` · imported ${fmtImported(importedAt)}` : ""
       }`}
     >
       <OrdersPipeline
