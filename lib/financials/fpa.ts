@@ -63,17 +63,35 @@ export type FpaReport = {
 
 const pctOf = (num: number, den: number): number | null => (den ? (num / den) * 100 : null);
 
-// Order the periods the way the dashboard does: by period_end, label as a
-// fallback, so a missing end date can't scramble the timeline.
+const MONTH_NUM: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
+// A CHRONOLOGICAL sort key. period_end (ISO) is authoritative and collates
+// correctly as a string. When it's absent — the manual uploader makes the end
+// date optional — sorting by the raw label would order months alphabetically
+// (Apr, Aug, Dec, Feb…), silently mispairing every MoM comparison. So fall back
+// to parsing a "Mon YYYY" label into YYYY-MM-01, and push anything unparseable
+// to the end in stable label order rather than into the middle of the timeline.
+function monthSortKey(label: string, end: string | null): string {
+  if (end && /^\d{4}-\d{2}-\d{2}$/.test(end)) return end;
+  const m = label.trim().toLowerCase().match(/^([a-z]{3})[a-z]*\s+(\d{4})$/);
+  if (m && MONTH_NUM[m[1]]) return `${m[2]}-${MONTH_NUM[m[1]]}-01`;
+  return `9999-99-99 ${label}`;
+}
+
+// Order the periods chronologically so month i-1 really is the month before i —
+// every MoM growth and every mover pairing depends on this being time order.
 function orderedMonths(items: FpaRawItem[]): { label: string; end: string | null }[] {
   const seen = new Map<string, string | null>();
   for (const it of items) if (!seen.has(it.periodLabel)) seen.set(it.periodLabel, it.periodEnd);
   return [...seen.entries()]
     .map(([label, end]) => ({ label, end }))
     .sort((a, b) => {
-      const ae = a.end ?? a.label;
-      const be = b.end ?? b.label;
-      return ae < be ? -1 : ae > be ? 1 : 0;
+      const ak = monthSortKey(a.label, a.end);
+      const bk = monthSortKey(b.label, b.end);
+      return ak < bk ? -1 : ak > bk ? 1 : 0;
     });
 }
 
