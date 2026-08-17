@@ -80,7 +80,7 @@ export function normalizeRole(v: unknown): ClientRole {
 // ── Navigation ───────────────────────────────────────────────────────────────
 
 export type NavKey =
-  | "overview" | "documents" | "financials" | "marketing" | "googleAds"
+  | "overview" | "documents" | "financials" | "fpa" | "marketing" | "googleAds"
   | "opsReports" | "levers" | "pricing" | "settings" | "account" | "admin";
 
 /** null = always visible to anyone with access to the client. */
@@ -88,6 +88,7 @@ export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
   overview: null,
   documents: "documents",
   financials: "financials",
+  fpa: "financials", // FP&A is financial detail — same gate as Financials
   marketing: "marketing",
   googleAds: "marketing",
   opsReports: "ops",
