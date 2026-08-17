@@ -18,6 +18,7 @@ export const PL_CATEGORIES: Category[] = [
   { key: "taxes", label: "Taxes", group: "expense" },
   { key: "other_income", label: "Other Income", group: "income" },
   { key: "other_expense", label: "Other Expense", group: "expense" },
+  { key: "other_below", label: "Other — below EBITDA", group: "expense" },
   { key: "exclude", label: "Exclude (subtotal / ignore)", group: "ignore" },
 ];
 
@@ -43,12 +44,19 @@ export function categoryLabel(type: StatementType, key: string): string {
 }
 
 export function normalizeLabel(raw: string): string {
-  return raw.toLowerCase().replace(/\s+/g, " ").trim();
+  // Fold curly apostrophes to straight so "Members’ Deficit" matches a map key
+  // written with a plain apostrophe.
+  return raw.toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
 }
 
 // Keyword rules, evaluated in order. First match wins.
 const PL_RULES: [RegExp, string][] = [
   [/\b(total|subtotal|gross profit|net (income|profit|loss)|net ordinary|operating income)\b/, "exclude"],
+  // Non-operating reconciling line QBO parks below the operating result. Kept
+  // out of opex so it doesn't distort EBITDA; still reduces net income.
+  [/\bask my accountant\b/, "other_below"],
+  // Card rewards booked as operating other-income (above EBITDA), not a COGS/opex offset.
+  [/\bcredit card rewards?\b/, "other_income"],
   [/\b(depreciation|amortization|amortisation)\b/, "depreciation_amortization"],
   [/\binterest\b/, "interest"],
   [/\b(income tax|tax expense|taxes|provision for tax)\b/, "taxes"],

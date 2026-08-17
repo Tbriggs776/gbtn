@@ -15,6 +15,7 @@ export type PLMetrics = {
   taxes: number;
   otherIncome: number;
   otherExpense: number;
+  otherBelow: number; // non-operating items below EBITDA (e.g. QBO "Ask My Accountant")
   netIncome: number;
   opexRatio: number | null; // % of revenue
 };
@@ -37,19 +38,14 @@ export type BSMetrics = {
   debtToEquity: number | null;
 };
 
-const EXPENSE = new Set([
-  "cogs",
-  "opex",
-  "depreciation_amortization",
-  "interest",
-  "taxes",
-  "other_expense",
-]);
-
-function sum(items: LineItem[], cat: string, abs = false): number {
+// Amounts are stored with their natural sign: expenses and liabilities positive,
+// credits negative (an insurance refund, an accrual reversal). We sum signed —
+// NOT abs — so a −$3,544 insurance credit reduces opex instead of inflating it.
+// Taking abs here once flipped a real credit and threw EBITDA off by 2× its value.
+function sum(items: LineItem[], cat: string): number {
   return items
     .filter((i) => i.category === cat)
-    .reduce((t, i) => t + (abs ? Math.abs(i.amount) : i.amount), 0);
+    .reduce((t, i) => t + i.amount, 0);
 }
 
 const pct = (num: number, den: number): number | null =>
@@ -57,17 +53,21 @@ const pct = (num: number, den: number): number | null =>
 
 export function computePL(items: LineItem[]): PLMetrics {
   const revenue = sum(items, "revenue");
-  const cogs = sum(items, "cogs", true);
-  const opex = sum(items, "opex", true);
-  const da = sum(items, "depreciation_amortization", true);
-  const interest = sum(items, "interest", true);
-  const taxes = sum(items, "taxes", true);
+  const cogs = sum(items, "cogs");
+  const opex = sum(items, "opex");
+  const da = sum(items, "depreciation_amortization");
+  const interest = sum(items, "interest");
+  const taxes = sum(items, "taxes");
   const otherIncome = sum(items, "other_income");
-  const otherExpense = sum(items, "other_expense", true);
+  const otherExpense = sum(items, "other_expense");
+  // Signed on purpose: a below-EBITDA "other" line (QBO Ask-My-Accountant,
+  // one-off non-operating items) can be a charge or a credit, and it must move
+  // net income by exactly its book value without touching EBITDA.
+  const otherBelow = sum(items, "other_below");
 
   const grossProfit = revenue - cogs;
   const ebitda = grossProfit - opex + otherIncome - otherExpense;
-  const netIncome = ebitda - da - interest - taxes;
+  const netIncome = ebitda - da - interest - taxes - otherBelow;
 
   return {
     revenue,
@@ -82,6 +82,7 @@ export function computePL(items: LineItem[]): PLMetrics {
     taxes,
     otherIncome,
     otherExpense,
+    otherBelow,
     netIncome,
     opexRatio: pct(opex, revenue),
   };
@@ -114,6 +115,7 @@ export function aggregatePL(months: PLMetrics[]): PLMetrics | null {
     taxes: add("taxes"),
     otherIncome: add("otherIncome"),
     otherExpense: add("otherExpense"),
+    otherBelow: add("otherBelow"),
     netIncome: add("netIncome"),
     opexRatio: pct(opex, revenue),
   };
@@ -126,9 +128,9 @@ export function computeBS(items: LineItem[]): BSMetrics {
   const otherCA = sum(items, "other_current_asset");
   const nonCurrentAssets = sum(items, "non_current_asset");
 
-  const ap = sum(items, "accounts_payable", true);
-  const otherCL = sum(items, "other_current_liability", true);
-  const nonCurrentLiabilities = sum(items, "non_current_liability", true);
+  const ap = sum(items, "accounts_payable");
+  const otherCL = sum(items, "other_current_liability");
+  const nonCurrentLiabilities = sum(items, "non_current_liability");
   const equity = sum(items, "equity");
 
   const currentAssets = cash + ar + inventory + otherCA;

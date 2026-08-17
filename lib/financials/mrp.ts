@@ -36,8 +36,10 @@ const PL_MAP: Record<string, string> = {
   utilities: "opex",
   insurance: "opex",
   "other operating": "opex",
+  "credit card rewards": "other_income", // operating other-income, above EBITDA
   depreciation: "depreciation_amortization",
   "interest expense": "interest",
+  "other (ask my accountant)": "other_below", // non-operating, below EBITDA
 };
 const BS_MAP: Record<string, string> = {
   "cash & bank": "cash",
@@ -87,14 +89,17 @@ function toNumber(v: unknown): number | null {
 
 function categorize(type: StatementType, label: string): string | null {
   const norm = normalizeLabel(label);
+  const map = type === "pl" ? PL_MAP : BS_MAP;
+  // A known line wins even if it reads like a subtotal: "Total Equity (Members'
+  // Deficit)" is the equity figure, not a running total to drop. Checking the
+  // map first is what keeps the balance sheet in balance.
+  if (map[norm]) return map[norm];
   if (
     /^(total|subtotal|gross profit|net (income|profit|loss)|operating expenses|cost of (goods|sales)|check|balance sheet|p&l|line item|year open)/.test(
       norm
     )
   )
     return null;
-  const map = type === "pl" ? PL_MAP : BS_MAP;
-  if (map[norm]) return map[norm];
   const guess = guessCategory(type, label);
   return guess === "exclude" ? null : guess;
 }
