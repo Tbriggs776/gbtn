@@ -95,13 +95,13 @@ function TheRead({
       </div>
 
       {ai ? (
-        <div className="mt-2 max-w-[80ch] space-y-2 text-sm leading-relaxed text-ink">
+        <div className="mt-3 grid gap-x-10 gap-y-4 text-sm leading-relaxed text-ink [grid-template-columns:repeat(auto-fit,minmax(24rem,1fr))]">
           {ai.content.split(/\n\s*\n/).map((para, i) => (
             <p key={i}>{para}</p>
           ))}
         </div>
       ) : (
-        <p className="mt-2 max-w-[80ch] text-sm leading-relaxed text-ink">{fallback}</p>
+        <p className="mt-2 text-sm leading-relaxed text-ink">{fallback}</p>
       )}
 
       {state.error ? <p className="mt-2 text-xs text-red-600">{state.error}</p> : null}
