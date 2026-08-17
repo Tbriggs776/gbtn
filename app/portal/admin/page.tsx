@@ -6,6 +6,8 @@ import { PortalHeader, PortalShell } from "@/components/portal/ui";
 import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-forms";
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 import { AdminAnalytics, type ActivityEvent } from "@/components/portal/admin-analytics";
+import { Integrations } from "@/components/portal/admin/integrations";
+import { platformIntegrationInfo } from "@/lib/integrations/platform-secrets";
 import { normalizeRole, type ClientRole } from "@/lib/permissions";
 
 export default async function AdminPage() {
@@ -193,9 +195,13 @@ export default async function AdminPage() {
         />
       </section>
 
-      {/* Analytics and inbound inquiries are GBTN-wide, not per-client. */}
+      {/* Analytics, integrations, and inbound inquiries are GBTN-wide. */}
       {isPlatformAdmin ? (
       <>
+      <div className="mt-6">
+        <Integrations anthropic={await platformIntegrationInfo("anthropic")} />
+      </div>
+
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">
         <div className="border-b border-line px-6 py-4">
           <h2 className="text-base font-bold text-ink">Usage analytics</h2>

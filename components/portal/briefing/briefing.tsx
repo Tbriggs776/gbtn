@@ -12,8 +12,10 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import { useActionState } from "react";
 import type { BridgeReport } from "@/lib/briefing/bridge";
 import { money, percent } from "@/lib/financials/metrics";
+import { generateBriefingAction, type GenerateState } from "@/app/portal/briefing/actions";
 
 const BOOKED = "#11294a"; // navy — sold
 const INSTALLED = "#b3761e"; // amber — delivered
@@ -52,14 +54,81 @@ const tipStyle = { borderRadius: 12, border: "1px solid #e7e2d9", fontSize: 12 }
 // recharts' Formatter passes a broad ValueType; coerce to a number for money().
 const moneyFmt = (v: unknown) => money(Number(v) || 0);
 
+type AiSummary = { content: string; model: string | null; generatedAt: string };
+
+// AI narrative when present, deterministic read otherwise. Generation is
+// admin-only (it bills GBTN's key); everyone else reads the cached summary.
+function TheRead({
+  ai,
+  fallback,
+  clientId,
+  isAdmin,
+}: {
+  ai: AiSummary | null;
+  fallback: string;
+  clientId: string;
+  isAdmin: boolean;
+}) {
+  const [state, action, pending] = useActionState<GenerateState, FormData>(generateBriefingAction, {});
+  const stamp = ai
+    ? new Date(ai.generatedAt).toLocaleDateString("en-US", { timeZone: "America/Phoenix" })
+    : null;
+
+  return (
+    <div className="rounded-2xl border border-line bg-paper-soft/40 p-5 ring-soft">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">
+          The read{ai ? <span className="ml-2 font-normal normal-case text-muted-soft">AI · {ai.model ?? "opus"} · {stamp}</span> : null}
+        </p>
+        {isAdmin ? (
+          <form action={action}>
+            <input type="hidden" name="clientId" value={clientId} />
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-md border border-line px-3 py-1 text-xs font-semibold text-ink transition-colors hover:bg-white disabled:opacity-60"
+            >
+              {pending ? "Generating…" : ai ? "Regenerate" : "Generate AI summary"}
+            </button>
+          </form>
+        ) : null}
+      </div>
+
+      {ai ? (
+        <div className="mt-2 max-w-[80ch] space-y-2 text-sm leading-relaxed text-ink">
+          {ai.content.split(/\n\s*\n/).map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 max-w-[80ch] text-sm leading-relaxed text-ink">{fallback}</p>
+      )}
+
+      {state.error ? <p className="mt-2 text-xs text-red-600">{state.error}</p> : null}
+      {isAdmin && !ai ? (
+        <p className="mt-2 text-xs text-muted-soft">
+          The deterministic read above always shows. Generate an AI-written briefing (needs an Anthropic key under
+          Admin → Integrations).
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function Briefing({
   report,
   opsAsOf,
   finThrough,
+  clientId,
+  isAdmin,
+  aiSummary,
 }: {
   report: BridgeReport;
   opsAsOf: string | null;
   finThrough: string | null;
+  clientId: string;
+  isAdmin: boolean;
+  aiSummary: AiSummary | null;
 }) {
   const { months, forward, latest } = report;
 
@@ -143,11 +212,8 @@ export function Briefing({
         />
       </div>
 
-      {read.length > 0 ? (
-        <div className="rounded-2xl border border-line bg-paper-soft/40 p-5 ring-soft">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">The read</p>
-          <p className="mt-2 max-w-[80ch] text-sm leading-relaxed text-ink">{read.join(" ")}</p>
-        </div>
+      {read.length > 0 || aiSummary ? (
+        <TheRead ai={aiSummary} fallback={read.join(" ")} clientId={clientId} isAdmin={isAdmin} />
       ) : null}
 
       {/* 1 — Booked vs installed vs recognized */}

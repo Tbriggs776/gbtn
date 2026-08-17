@@ -1,5 +1,6 @@
 import { getSession, getActiveClient, requireCapability } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { PortalHeader, PortalShell, EmptyState, NoClientState } from "@/components/portal/ui";
 import { Briefing } from "@/components/portal/briefing/briefing";
 import { buildBridge } from "@/lib/briefing/bridge";
@@ -60,6 +61,17 @@ export default async function BriefingPage({
 
   const report = buildBridge(ops, fin);
 
+  // Latest cached AI briefing (read via service role — the requireCapability
+  // gate above is the real check, and a platform admin may not be a member).
+  const { data: summary } = await createAdminClient()
+    .from("ai_summaries")
+    .select("content, model, generated_at")
+    .eq("client_id", activeClient.id)
+    .eq("kind", "cfo_briefing")
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   // The financials' most recent close, for the "two clocks" caption.
   const finThroughEnd = (uploads ?? [])
     .map((u) => u.period_end)
@@ -77,7 +89,18 @@ export default async function BriefingPage({
       />
       <div className="mt-8">
         {report.hasFin && report.hasOps ? (
-          <Briefing report={report} opsAsOf={report.asOf ? fmtDate(report.asOf) : null} finThrough={finThrough} />
+          <Briefing
+            report={report}
+            opsAsOf={report.asOf ? fmtDate(report.asOf) : null}
+            finThrough={finThrough}
+            clientId={activeClient.id}
+            isAdmin={Boolean(session?.isAdmin)}
+            aiSummary={
+              summary
+                ? { content: summary.content, model: summary.model, generatedAt: summary.generated_at }
+                : null
+            }
+          />
         ) : (
           <EmptyState
             title={report.hasFin ? "No operations data yet" : "No financials yet"}
