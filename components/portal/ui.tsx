@@ -27,11 +27,17 @@ export function PortalShell({
   wide = false,
 }: {
   children: ReactNode;
-  /** Data-dense pages (the Ops boards) need more than the reading-width default. */
+  /**
+   * Data-dense pages (Ops boards, financial dashboards) run fully fluid — they
+   * use the whole viewport. The reading-oriented default still fills a wide
+   * screen but keeps a generous cap so single-column forms don't strand.
+   */
   wide?: boolean;
 }) {
   return (
-    <div className={`mx-auto ${wide ? "max-w-7xl" : "max-w-5xl"} px-5 py-8 sm:px-8 sm:py-10`}>
+    <div
+      className={`mx-auto w-full ${wide ? "max-w-none" : "max-w-[110rem]"} px-5 py-8 sm:px-8 sm:py-10 2xl:px-12`}
+    >
       {children}
     </div>
   );

@@ -29,7 +29,7 @@ export default async function FinancialsPage({
 
   if (!activeClient) {
     return (
-      <PortalShell>
+      <PortalShell wide>
         <PortalHeader title="Financials" />
         <div className="mt-8">
           <NoClientState isAdmin={Boolean(session?.isAdmin)} />
@@ -91,7 +91,7 @@ export default async function FinancialsPage({
     : new Date().getFullYear();
 
   return (
-    <PortalShell>
+    <PortalShell wide>
       <PortalHeader
         title="Financials"
         subtitle={

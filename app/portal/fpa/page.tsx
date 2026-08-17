@@ -18,7 +18,7 @@ export default async function FpaPage({
 
   if (!activeClient) {
     return (
-      <PortalShell>
+      <PortalShell wide>
         <PortalHeader title="FP&A" />
         <div className="mt-8">
           <NoClientState isAdmin={Boolean(session?.isAdmin)} />
@@ -61,7 +61,7 @@ export default async function FpaPage({
   const isAdmin = Boolean(session?.isAdmin);
 
   return (
-    <PortalShell>
+    <PortalShell wide>
       <PortalHeader
         title="FP&A"
         subtitle={`${activeClient.name} · overhead and cost trends, month over month`}
