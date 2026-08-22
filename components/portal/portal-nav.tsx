@@ -21,6 +21,7 @@ const icons = {
   levers: "M4 8h10M18 8h2M4 16h6M14 16h6M14 6v4M10 14v4",
   pricing: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
   ops: "M8 2v3M16 2v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM9 12h2M9 16h2M14 12h2",
+  crm: "M17 20h5v-2a4 4 0 0 0-3-3.87M9 20H4v-2a4 4 0 0 1 3-3.87m5-1.13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
   account: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0",
   settings:
     "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
@@ -72,6 +73,10 @@ export function PortalNav({
     all.push({ label: "Ops Reports", href: "/portal/ops-reports", icon: "ops", key: "opsReports" });
     all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
     all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
+  }
+  // CRM is GBTN's internal agency-sales tool — platform admins only.
+  if (isAdmin) {
+    all.push({ label: "CRM", href: "/portal/crm", icon: "crm", key: "crm" });
   }
   all.push({ label: "Settings", href: "/portal/settings", icon: "settings", key: "settings" });
   all.push({ label: "Account", href: "/portal/account", icon: "account", key: "account" });

@@ -81,7 +81,7 @@ export function normalizeRole(v: unknown): ClientRole {
 
 export type NavKey =
   | "overview" | "documents" | "financials" | "fpa" | "briefing" | "marketing" | "googleAds"
-  | "opsReports" | "levers" | "pricing" | "settings" | "account" | "admin";
+  | "opsReports" | "levers" | "pricing" | "crm" | "settings" | "account" | "admin";
 
 /** null = always visible to anyone with access to the client. */
 export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
@@ -95,6 +95,10 @@ export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
   opsReports: "ops",
   levers: "ops",
   pricing: "ops",
+  // CRM is GBTN-internal (agency sales). It's added to the sidebar only for
+  // platform admins (see portal-nav), and every /portal/crm page is guarded by
+  // requireAdmin, so no client role ever reaches it. null keeps the type total.
+  crm: null,
   settings: "marketing", // configures the marketing/CallRail connections
   account: null,
   admin: "manage_users",

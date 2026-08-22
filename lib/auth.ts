@@ -55,6 +55,14 @@ export async function requireAdmin(): Promise<SessionContext> {
   return session;
 }
 
+// Same as requireAdmin but throws instead of redirecting — for server actions
+// and route handlers where a redirect would be the wrong response.
+export async function assertAdmin(): Promise<SessionContext> {
+  const session = await requireSession();
+  if (!session.isAdmin) throw new Error("Platform admin access required.");
+  return session;
+}
+
 // All clients the current user may access: platform admins see every client;
 // client users see only the clients they belong to. RLS enforces this too.
 export async function getAccessibleClients(): Promise<Client[]> {

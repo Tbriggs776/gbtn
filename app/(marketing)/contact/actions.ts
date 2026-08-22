@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, emailLayout, CONTACT_NOTIFY_TO } from "@/lib/email";
+import { ingestFormSubmission } from "@/lib/crm/service";
 
 export type ContactState = { ok?: boolean; error?: string };
 
@@ -61,6 +62,16 @@ export async function submitContactAction(
       .single();
     if (error) throw new Error(error.message);
     submissionId = data?.id ?? null;
+
+    // Mirror the lead into the CRM (best-effort; never blocks the submission).
+    await ingestFormSubmission(admin, {
+      name: d.name,
+      email: d.email,
+      company: d.company ?? null,
+      revenue: d.revenue ?? null,
+      message: d.message,
+      submissionId,
+    });
   } catch {
     return {
       error:
