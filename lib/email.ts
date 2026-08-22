@@ -7,22 +7,31 @@ import "server-only";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? "";
 
-// System sender for all app-originated email. "Growth by the Numbers
-// <noreply@yourdomain.com>" — must be a Resend-verified domain to deliver to
-// arbitrary recipients. Falls back to Resend's shared testing sender (which
-// only reaches your own Resend signup address). EMAIL_FROM is the canonical
-// var; CONTACT_FROM_EMAIL is kept as a backward-compatible alias.
+// System sender for all app-originated email. Must be a Resend-verified domain
+// to deliver to arbitrary recipients. EMAIL_FROM is the canonical var;
+// CONTACT_FROM_EMAIL is kept as a backward-compatible alias.
 const FROM =
   process.env.EMAIL_FROM ??
   process.env.CONTACT_FROM_EMAIL ??
-  "Growth by the Numbers <onboarding@resend.dev>";
+  "Growth by the Numbers <noreply@growthbythenumbers.com>";
 
 // Where lead/admin notifications land. Defaults to Tyler's address.
 const NOTIFY_TO = process.env.CONTACT_NOTIFY_TO ?? "tyler@tylermbriggs.com";
 
 export const isEmailConfigured = Boolean(RESEND_API_KEY);
 
+// Homepage book waitlist segment in Resend Audiences.
+export const BOOK_WAITLIST_SEGMENT_ID =
+  "f3e92b20-7277-470f-b8f5-ebc0090f71b6";
+
 type SendResult = { ok: boolean; error?: string };
+
+function authHeaders(): HeadersInit {
+  return {
+    Authorization: `Bearer ${RESEND_API_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
 
 export async function sendEmail({
   to,
@@ -45,10 +54,7 @@ export async function sendEmail({
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: authHeaders(),
       body: JSON.stringify({
         from: FROM,
         to: recipients,
@@ -64,6 +70,62 @@ export async function sendEmail({
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Send failed." };
+  }
+}
+
+// Create or update a Resend contact and attach them to a segment. Best-effort:
+// callers should persist the source record first and ignore a false `ok`.
+export async function upsertResendContact({
+  email,
+  firstName,
+  segmentId,
+}: {
+  email: string;
+  firstName?: string;
+  segmentId: string;
+}): Promise<SendResult> {
+  if (!RESEND_API_KEY) {
+    return { ok: false, error: "RESEND_API_KEY is not configured." };
+  }
+  const body = {
+    email,
+    ...(firstName ? { first_name: firstName } : {}),
+    unsubscribed: false,
+    segments: [{ id: segmentId }],
+  };
+  try {
+    const created = await fetch("https://api.resend.com/contacts", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (created.ok) return { ok: true };
+
+    const patched = await fetch(
+      `https://api.resend.com/contacts/${encodeURIComponent(email)}`,
+      {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          ...(firstName ? { first_name: firstName } : {}),
+          unsubscribed: false,
+          segments: [{ id: segmentId }],
+        }),
+      }
+    );
+    if (patched.ok) return { ok: true };
+
+    const createdText = await created.text();
+    const patchedText = await patched.text();
+    return {
+      ok: false,
+      error: `Resend contact create ${created.status}: ${createdText.slice(0, 200)}; patch ${patched.status}: ${patchedText.slice(0, 200)}`,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Contact upsert failed.",
+    };
   }
 }
 

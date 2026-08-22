@@ -3,7 +3,13 @@
 import { headers } from "next/headers";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendEmail, emailLayout, CONTACT_NOTIFY_TO } from "@/lib/email";
+import {
+  sendEmail,
+  emailLayout,
+  CONTACT_NOTIFY_TO,
+  upsertResendContact,
+  BOOK_WAITLIST_SEGMENT_ID,
+} from "@/lib/email";
 
 export type WaitlistState = { ok?: boolean; error?: string };
 
@@ -60,6 +66,33 @@ export async function submitWaitlistAction(
         CONTACT_NOTIFY_TO +
         ".",
     };
+  }
+
+  const contact = await upsertResendContact({
+    email: d.email,
+    firstName: d.firstName,
+    segmentId: BOOK_WAITLIST_SEGMENT_ID,
+  });
+  if (!contact.ok) {
+    console.error("[waitlist] Resend contact upsert failed:", contact.error);
+  }
+
+  const greeting = d.firstName ? `Hi ${esc(d.firstName)},` : "Hi,";
+  const confirmHtml = emailLayout({
+    heading: "You're on the book waitlist",
+    bodyHtml: `
+      <p style="margin:0 0 12px">${greeting}</p>
+      <p style="margin:0 0 12px">You're on the list for the book — not a consultation. I'll email you when it's ready. No spam, no drip sequence.</p>
+      <p style="margin:0">If you meant to book a consult instead, reply to this email or use the contact page on growthbythenumbers.com.</p>`,
+    footnote: "Book waitlist confirmation · not a consultation request.",
+  });
+  const confirmed = await sendEmail({
+    to: d.email,
+    subject: "You're on the book waitlist",
+    html: confirmHtml,
+  });
+  if (!confirmed.ok) {
+    console.error("[waitlist] subscriber confirmation failed:", confirmed.error);
   }
 
   const row = (label: string, value: string) =>
