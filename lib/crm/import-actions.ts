@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/auth";
+import { assertStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { toE164 } from "./twilio";
 import type { ActionResult } from "./types";
@@ -54,7 +54,7 @@ export async function importContacts(
   csv: string
 ): Promise<ActionResult<{ imported: number; skipped: number; companies: number }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const rows = parseCsv(csv);
     if (rows.length < 2) return { ok: false, error: "CSV needs a header row and at least one contact." };

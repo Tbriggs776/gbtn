@@ -3,7 +3,7 @@ import { requireSession, getAccessibleClients } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PortalHeader, PortalShell } from "@/components/portal/ui";
-import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-forms";
+import { CreateClientForm, InviteUserForm, InviteStaffForm } from "@/components/portal/admin-forms";
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 import { AdminAnalytics, type ActivityEvent } from "@/components/portal/admin-analytics";
 import { Integrations } from "@/components/portal/admin/integrations";
@@ -138,6 +138,18 @@ export default async function AdminPage() {
           </p>
           <InviteUserForm clients={clients} />
         </section>
+
+        {/* Creating GBTN staff (admins/employees) is a platform operation. */}
+        {isPlatformAdmin ? (
+          <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
+            <h2 className="text-base font-bold text-ink">Add a GBTN team member</h2>
+            <p className="mt-1 mb-5 text-sm text-muted">
+              Employees get the CRM only; admins get everything. They sign in at{" "}
+              <span className="font-mono">/team</span>.
+            </p>
+            <InviteStaffForm />
+          </section>
+        ) : null}
       </div>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">

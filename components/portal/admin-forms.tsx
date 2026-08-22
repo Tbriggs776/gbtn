@@ -6,6 +6,7 @@ import { CLIENT_ROLES, ROLE_BLURB, ROLE_LABEL } from "@/lib/permissions";
 import {
   createClientAction,
   inviteUserAction,
+  inviteStaffAction,
   type ActionState,
 } from "@/app/portal/admin/actions";
 
@@ -61,6 +62,80 @@ export function CreateClientForm() {
       <div className="flex items-center justify-between gap-3">
         <Feedback state={state} />
         <SubmitButton label="Create client" pending={pending} />
+      </div>
+    </form>
+  );
+}
+
+export function InviteStaffForm() {
+  const [state, action, pending] = useActionState(inviteStaffAction, initial);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    if (state.ok) {
+      formRef.current?.reset();
+      setPassword("");
+    }
+  }, [state.ok]);
+
+  return (
+    <form ref={formRef} action={action} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="staffName" className={labelClass}>
+            Full name <span className="text-muted-soft">(optional)</span>
+          </label>
+          <input id="staffName" name="fullName" className={fieldClass} placeholder="Alex Rep" />
+        </div>
+        <div>
+          <label htmlFor="staffEmail" className={labelClass}>
+            Email
+          </label>
+          <input id="staffEmail" name="email" type="email" required className={fieldClass} placeholder="alex@growthbythenumbers.com" />
+        </div>
+      </div>
+      <div>
+        <label htmlFor="staffRole" className={labelClass}>
+          Access level
+        </label>
+        <select id="staffRole" name="role" className={fieldClass} defaultValue="employee">
+          <option value="employee">Employee — CRM only (no client data or admin)</option>
+          <option value="admin">Admin — full access, incl. clients &amp; user management</option>
+        </select>
+      </div>
+      <div>
+        <label htmlFor="staffPassword" className={labelClass}>
+          Starter password
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="staffPassword"
+            name="password"
+            type="text"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={fieldClass}
+            placeholder="At least 8 characters"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            onClick={() => setPassword(generatePassword())}
+            className="shrink-0 rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-muted transition-colors hover:text-ink"
+          >
+            Generate
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-muted-soft">
+          They sign in at <span className="font-mono">/team</span> and change the password on first login.
+        </p>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <Feedback state={state} />
+        <SubmitButton label="Add team member" pending={pending} />
       </div>
     </form>
   );

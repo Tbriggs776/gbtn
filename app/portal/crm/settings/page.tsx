@@ -4,8 +4,11 @@ import { TwilioForm, CallRailForm } from "@/components/portal/crm/settings-forms
 import { Badge } from "@/components/portal/crm/ui";
 import { platformIntegrationInfo } from "@/lib/integrations/platform-secrets";
 import { appBaseUrl } from "@/lib/crm/comms";
+import { requireAdmin } from "@/lib/auth";
 
 export default async function CrmSettings() {
+  // Integration credentials are admin-only; employees are bounced to CRM home.
+  await requireAdmin();
   const [twilio, callrail, anthropic] = await Promise.all([
     platformIntegrationInfo("twilio"),
     platformIntegrationInfo("callrail"),

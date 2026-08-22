@@ -1,6 +1,9 @@
 // Shared types mirroring the database schema (see supabase/migrations).
 
-export type Role = "admin" | "client";
+// Platform role. "admin" = full GBTN staff (Tyler); "employee" = GBTN staff who
+// work the CRM but can't provision clients, manage users, or see client
+// financials; "client" = a customer of GBTN. "Staff" means admin ∪ employee.
+export type Role = "admin" | "employee" | "client";
 
 export type Profile = {
   id: string;

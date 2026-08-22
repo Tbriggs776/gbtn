@@ -39,12 +39,15 @@ function Icon({ d }: { d: string }) {
 
 export function PortalNav({
   isAdmin,
+  isStaff = false,
   clients,
   defaultClientId,
   userEmail,
   roles,
 }: {
   isAdmin: boolean;
+  /** GBTN staff (admin OR employee). Employees get a CRM-only sidebar. */
+  isStaff?: boolean;
   clients: Client[];
   defaultClientId: string | null;
   userEmail: string;
@@ -74,17 +77,22 @@ export function PortalNav({
     all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
     all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
   }
-  // CRM is GBTN's internal agency-sales tool — platform admins only.
-  if (isAdmin) {
+  // CRM is GBTN's internal agency-sales tool — staff only (admins + employees).
+  if (isStaff) {
     all.push({ label: "CRM", href: "/portal/crm", icon: "crm", key: "crm" });
   }
   all.push({ label: "Settings", href: "/portal/settings", icon: "settings", key: "settings" });
   all.push({ label: "Account", href: "/portal/account", icon: "account", key: "account" });
   all.push({ label: "Admin", href: "/portal/admin", icon: "admin", key: "admin" });
 
-  // The sidebar must offer exactly what the server will honour — same matrix,
-  // same answer — or users get links that bounce them back to /portal.
-  const items = all.filter((i) => canSeeNav(i.key, role, isAdmin));
+  // Employees (staff who aren't platform admins) have no client data — give them
+  // a focused sidebar: CRM + Account only. Everyone else gets the capability
+  // matrix, which must mirror exactly what the server honours or links would
+  // bounce back to /portal.
+  const isEmployee = isStaff && !isAdmin;
+  const items = isEmployee
+    ? all.filter((i) => i.key === "crm" || i.key === "account")
+    : all.filter((i) => canSeeNav(i.key, role, isAdmin));
 
   const isActive = (href: string) =>
     href === "/portal" ? pathname === "/portal" : pathname.startsWith(href);

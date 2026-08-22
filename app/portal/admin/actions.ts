@@ -140,6 +140,64 @@ export async function inviteUserAction(
   };
 }
 
+// Admin: create a GBTN staff account (admin or employee). No client membership —
+// staff live in the CRM/internal tools, not a client workspace. Platform-admin
+// only (granting staff access to the whole system must not be delegable).
+const createStaffSchema = z.object({
+  email: z.string().email("Enter a valid email."),
+  fullName: z.string().max(120).optional(),
+  role: z.enum(["admin", "employee"]),
+  password: z.string().min(8, "Password must be at least 8 characters."),
+});
+
+export async function inviteStaffAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const parsed = createStaffSchema.safeParse({
+    email: String(formData.get("email") ?? "").trim(),
+    fullName: String(formData.get("fullName") ?? "").trim() || undefined,
+    role: String(formData.get("role") ?? "employee"),
+    password: String(formData.get("password") ?? ""),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { email, fullName, role, password } = parsed.data;
+  const admin = createAdminClient();
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: {
+      ...(fullName ? { full_name: fullName } : {}),
+      must_change_password: true,
+    },
+  });
+  if (error) {
+    if (/already.*(registered|exists)|exists/i.test(error.message)) {
+      return { error: "That email already has an account." };
+    }
+    return { error: error.message };
+  }
+
+  const userId = data.user?.id;
+  if (userId) {
+    // handle_new_user() seeds the profile as 'client'; promote to the staff role.
+    const { error: pErr } = await admin.from("profiles").update({ role }).eq("id", userId);
+    if (pErr) return { error: pErr.message };
+  }
+
+  revalidatePath("/portal/admin");
+  return {
+    ok: true,
+    message: `Created ${role} ${email}. Share the password — they'll be prompted to change it after signing in.`,
+  };
+}
+
 // Admin: replace a user's client memberships with the selected set (many-to-many).
 const setClientsSchema = z.object({
   userId: z.string().uuid("Invalid user."),
@@ -226,7 +284,7 @@ const updateUserSchema = z.object({
   userId: z.string().uuid("Invalid user."),
   fullName: z.string().trim().max(120).optional(),
   email: z.string().trim().email("Enter a valid email.").optional(),
-  role: z.enum(["admin", "client"]).optional(),
+  role: z.enum(["admin", "employee", "client"]).optional(),
   password: z.string().min(8, "Password must be at least 8 characters.").optional(),
 });
 
@@ -240,7 +298,11 @@ export async function updateUserAction(
     userId: String(formData.get("userId") ?? ""),
     fullName: String(formData.get("fullName") ?? "").trim() || undefined,
     email: String(formData.get("email") ?? "").trim() || undefined,
-    role: (String(formData.get("role") ?? "") || undefined) as "admin" | "client" | undefined,
+    role: (String(formData.get("role") ?? "") || undefined) as
+      | "admin"
+      | "employee"
+      | "client"
+      | undefined,
     password: String(formData.get("password") ?? "") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -266,7 +328,7 @@ export async function updateUserAction(
   }
 
   // Don't let an admin demote themselves (avoid locking out the last admin).
-  if (role === "client" && userId === session.user.id) {
+  if (role && role !== "admin" && userId === session.user.id) {
     return { error: "You can't remove your own admin access." };
   }
 

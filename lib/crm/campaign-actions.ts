@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/auth";
+import { assertStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getCampaign } from "./service";
 import {
@@ -26,7 +26,7 @@ export async function createCampaign(input: {
   body?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     if (!input.name?.trim()) return { ok: false, error: "Campaign name is required." };
     const { data, error } = await db
@@ -52,7 +52,7 @@ export async function createCampaign(input: {
 
 export async function updateCampaign(id: string, patch: Record<string, unknown>): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_campaigns").update(patch).eq("id", id);
     if (error) throw error;
@@ -68,7 +68,7 @@ export async function saveCampaignSteps(
   steps: { position: number; delay_minutes: number; channel: "email" | "sms"; subject?: string; body: string }[]
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     // Replace-all: simplest reliable editor semantics.
     await db.from("crm_campaign_steps").delete().eq("campaign_id", campaignId);
@@ -96,7 +96,7 @@ export async function enrollSelected(
   contactIds: string[]
 ): Promise<ActionResult<{ enrolled: number }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const n = await enrollContacts(db, campaignId, contactIds);
     revalidatePath(`${CRM}/campaigns/${campaignId}`);
@@ -111,7 +111,7 @@ export async function enrollAudience(
   audience: Record<string, unknown>
 ): Promise<ActionResult<{ enrolled: number }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const campaign = await getCampaign(db, campaignId);
     if (!campaign) return { ok: false, error: "Campaign not found." };
@@ -131,7 +131,7 @@ export async function enrollAudience(
 /** Send a blast immediately to its saved audience. */
 export async function sendCampaignNow(campaignId: string): Promise<ActionResult<{ sent: number; failed: number }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const campaign = await getCampaign(db, campaignId);
     if (!campaign) return { ok: false, error: "Campaign not found." };
@@ -147,7 +147,7 @@ export async function sendCampaignNow(campaignId: string): Promise<ActionResult<
 
 export async function scheduleCampaign(campaignId: string, whenIso: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db
       .from("crm_campaigns")
@@ -166,7 +166,7 @@ export async function setCampaignStatus(
   status: "draft" | "active" | "paused" | "archived"
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_campaigns").update({ status }).eq("id", campaignId);
     if (error) throw error;

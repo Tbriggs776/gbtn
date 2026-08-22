@@ -25,6 +25,7 @@ export default async function PortalLayout({
       <Suspense fallback={<div className="lg:w-64" />}>
         <PortalNav
           isAdmin={session.isAdmin}
+          isStaff={session.isStaff}
           clients={clients}
           defaultClientId={clients[0]?.id ?? null}
           userEmail={session.user.email ?? ""}

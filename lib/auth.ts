@@ -16,6 +16,10 @@ export type SessionContext = {
   profile: Profile | null;
   /** GBTN platform admin (profiles.role = 'admin') — every client, every capability. */
   isAdmin: boolean;
+  /** GBTN employee (profiles.role = 'employee') — CRM only, no client data. */
+  isEmployee: boolean;
+  /** GBTN staff: admin OR employee. Gates the CRM. */
+  isStaff: boolean;
   /** clientId -> this user's role in that client. Empty for platform admins. */
   roles: Record<string, ClientRole>;
 };
@@ -38,7 +42,9 @@ export async function getSession(): Promise<SessionContext | null> {
     roles[m.client_id as string] = normalizeRole(m.role);
   }
 
-  return { user, profile, isAdmin: profile?.role === "admin", roles };
+  const isAdmin = profile?.role === "admin";
+  const isEmployee = profile?.role === "employee";
+  return { user, profile, isAdmin, isEmployee, isStaff: isAdmin || isEmployee, roles };
 }
 
 // Require a signed-in user (redirects to /login otherwise).
@@ -60,6 +66,21 @@ export async function requireAdmin(): Promise<SessionContext> {
 export async function assertAdmin(): Promise<SessionContext> {
   const session = await requireSession();
   if (!session.isAdmin) throw new Error("Platform admin access required.");
+  return session;
+}
+
+// Require GBTN staff (admin OR employee) — the gate for the CRM. Clients are
+// bounced to their portal home.
+export async function requireStaff(): Promise<SessionContext> {
+  const session = await requireSession();
+  if (!session.isStaff) redirect("/portal");
+  return session;
+}
+
+// Throwing variant of requireStaff — for CRM server actions and route handlers.
+export async function assertStaff(): Promise<SessionContext> {
+  const session = await requireSession();
+  if (!session.isStaff) throw new Error("GBTN staff access required.");
   return session;
 }
 
