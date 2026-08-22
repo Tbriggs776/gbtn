@@ -9,8 +9,17 @@ import {
 
 const initial: WaitlistState = {};
 
-export function WaitlistForm() {
+export function WaitlistForm({
+  source = "book",
+  submitLabel,
+  idPrefix = "waitlist",
+}: {
+  source?: "book" | "metrics";
+  submitLabel?: string;
+  idPrefix?: string;
+}) {
   const [state, action, pending] = useActionState(submitWaitlistAction, initial);
+  const isMetrics = source === "metrics";
 
   const field =
     "w-full rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink placeholder:text-muted-soft focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100";
@@ -26,7 +35,20 @@ export function WaitlistForm() {
           <div>
             <p className="text-sm font-semibold text-ink">You&apos;re on the list.</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
-              I&apos;ll email you when the book is ready. No spam, no drip sequence.
+              {isMetrics ? (
+                <>
+                  Open the one-pager and print it (Save as PDF in the print dialog).
+                  You&apos;re also on the book waitlist. No spam, no drip sequence.{" "}
+                  <a
+                    href="/metrics/print"
+                    className="font-semibold text-brand-700 underline-offset-4 hover:underline"
+                  >
+                    Open the one-pager →
+                  </a>
+                </>
+              ) : (
+                <>I&apos;ll email you when the book is ready. No spam, no drip sequence.</>
+              )}
             </p>
           </div>
         </div>
@@ -37,16 +59,17 @@ export function WaitlistForm() {
   return (
     <form action={action} className="mt-6 grid gap-3 sm:grid-cols-[1fr_1.3fr_auto] sm:items-end">
       <div className="hidden" aria-hidden="true">
-        <label htmlFor="waitlist-website">Website</label>
-        <input id="waitlist-website" name="website" tabIndex={-1} autoComplete="off" />
+        <label htmlFor={`${idPrefix}-website`}>Website</label>
+        <input id={`${idPrefix}-website`} name="website" tabIndex={-1} autoComplete="off" />
       </div>
+      <input type="hidden" name="source" value={source} />
 
       <div>
-        <label htmlFor="waitlist-first-name" className={label}>
+        <label htmlFor={`${idPrefix}-first-name`} className={label}>
           First name <span className="font-normal text-muted-soft">(optional)</span>
         </label>
         <input
-          id="waitlist-first-name"
+          id={`${idPrefix}-first-name`}
           name="firstName"
           autoComplete="given-name"
           className={field}
@@ -54,11 +77,11 @@ export function WaitlistForm() {
         />
       </div>
       <div>
-        <label htmlFor="waitlist-email" className={label}>
+        <label htmlFor={`${idPrefix}-email`} className={label}>
           Email
         </label>
         <input
-          id="waitlist-email"
+          id={`${idPrefix}-email`}
           name="email"
           type="email"
           required
@@ -72,14 +95,22 @@ export function WaitlistForm() {
         disabled={pending}
         className="font-label inline-flex items-center justify-center rounded-md bg-crimson px-6 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-cream transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-60 disabled:hover:translate-y-0 sm:mb-px"
       >
-        {pending ? "Saving…" : "Get on the list"}
+        {pending ? "Saving…" : submitLabel ?? (isMetrics ? "Get the one-pager" : "Get on the list")}
       </button>
 
       {state.error ? (
         <p className="text-sm text-red-600 sm:col-span-3">{state.error}</p>
       ) : (
         <p className="text-xs text-muted-soft sm:col-span-3">
-          Book waitlist only. For a consult, use{" "}
+          {isMetrics ? (
+            <>
+              Email unlocks the one-pager and puts you on the book waitlist. For a consult, use{" "}
+            </>
+          ) : (
+            <>
+              Book waitlist only. For a consult, use{" "}
+            </>
+          )}
           <a href="/contact" className="font-medium text-brand-700 underline-offset-4 hover:underline">
             Book a consultation
           </a>
