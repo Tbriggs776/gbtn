@@ -20,7 +20,6 @@ import {
   services,
   differentiators,
   trackRecord,
-  site,
   levers,
   metrics,
   book,
@@ -67,10 +66,8 @@ export default function HomePage() {
         </Container>
       </section>
 
-      {/* ───────────────── Logo wall ───────────────── */}
       <LogoWall />
 
-      {/* ───────────────── The problem / wedge ───────────────── */}
       <Section>
         <Container>
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
@@ -115,7 +112,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── Services ───────────────── */}
       <Section className="bg-paper-soft">
         <Container>
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
@@ -176,7 +172,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── The method (levers + metrics) ───────────────── */}
       <section className="relative overflow-hidden bg-ink">
         <div className="absolute inset-0 grid-texture opacity-50" />
         <div className="glow absolute inset-x-0 -top-20 h-64" />
@@ -225,7 +220,6 @@ export default function HomePage() {
         </Container>
       </section>
 
-      {/* ───────────────── Track record highlight ───────────────── */}
       <Section>
         <Container>
           <div className="grid gap-12 lg:grid-cols-[1fr_1.1fr] lg:gap-16">
@@ -267,7 +261,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── Process ───────────────── */}
       <Section className="bg-paper-soft">
         <Container>
           <SectionHeading
@@ -281,7 +274,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── Book waitlist ───────────────── */}
       <Section id="waitlist" className="bg-paper-soft">
         <Container>
           <div className="grid items-center gap-8 rounded-3xl border border-line bg-white p-8 ring-soft sm:p-10 lg:grid-cols-[1.4fr_1fr] lg:gap-12">
@@ -312,7 +304,6 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── Testimonial placeholder ───────────────── */}
       <Section>
         <Container>
           <figure className="mx-auto max-w-3xl text-center">
