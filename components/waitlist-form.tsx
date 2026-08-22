@@ -24,9 +24,9 @@ export function WaitlistForm() {
             <Check className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-ink">You’re on the list.</p>
+            <p className="text-sm font-semibold text-ink">You&apos;re on the list.</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
-              I’ll email you when the book is ready. No spam, no drip sequence.
+              I&apos;ll email you when the book is ready. No spam, no drip sequence.
             </p>
           </div>
         </div>

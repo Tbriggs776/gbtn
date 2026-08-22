@@ -15,6 +15,7 @@ import {
   ProcessSteps,
   CtaBand,
 } from "@/components/sections";
+import { WaitlistForm } from "@/components/waitlist-form";
 import {
   services,
   differentiators,
@@ -280,8 +281,8 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      {/* ───────────────── Book ───────────────── */}
-      <Section className="bg-paper-soft">
+      {/* ───────────────── Book waitlist ───────────────── */}
+      <Section id="waitlist" className="bg-paper-soft">
         <Container>
           <div className="grid items-center gap-8 rounded-3xl border border-line bg-white p-8 ring-soft sm:p-10 lg:grid-cols-[1.4fr_1fr] lg:gap-12">
             <div>
@@ -295,11 +296,7 @@ export default function HomePage() {
               <p className="mt-4 text-base leading-relaxed text-muted">
                 {book.blurb}
               </p>
-              <div className="mt-6">
-                <Button href="/contact" variant="secondary">
-                  Get on the list <Arrow />
-                </Button>
-              </div>
+              <WaitlistForm />
             </div>
             <div className="flex flex-wrap gap-2.5">
               {metrics.map((m) => (
@@ -323,13 +320,11 @@ export default function HomePage() {
               &ldquo;
             </div>
             <blockquote className="mt-4 text-balance text-2xl font-medium leading-relaxed tracking-tight text-ink sm:text-3xl">
-              {/* TODO: replace with a real client testimonial */}
               Tyler walked into a fast-growth mess and gave us a financial
               operating system. For the first time, we made decisions on data
               instead of gut.
             </blockquote>
             <figcaption className="mt-6 text-sm font-medium text-muted">
-              {/* TODO: real attribution */}
               Owner &amp; Founder, PE-backed home services platform
             </figcaption>
           </figure>
