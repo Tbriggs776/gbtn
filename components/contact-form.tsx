@@ -21,11 +21,11 @@ export function ContactForm() {
           <Check className="text-white" />
         </div>
         <h3 className="mt-4 text-lg font-bold text-ink">
-          Thanks — your message is in.
+          Request received — I’ll be in touch.
         </h3>
         <p className="mt-2 max-w-sm text-sm text-muted">
-          I read every inquiry personally and typically reply within one
-          business day. Need me sooner? Reach me directly at{" "}
+          I read every consult request personally and typically reply within one
+          business day to set a 30-minute call. Need me sooner? Reach me at{" "}
           <a
             href={`mailto:${site.founder.email}`}
             className="font-medium text-brand-700 underline-offset-4 hover:underline"
@@ -40,7 +40,6 @@ export function ContactForm() {
 
   return (
     <form action={action} className="grid gap-4">
-      {/* Honeypot: hidden from real users; bots fill it and get silently dropped. */}
       <div className="hidden" aria-hidden="true">
         <label htmlFor="website">Website</label>
         <input id="website" name="website" tabIndex={-1} autoComplete="off" />
@@ -92,7 +91,7 @@ export function ContactForm() {
       </div>
       <div>
         <label htmlFor="message" className={label}>
-          What&apos;s on your mind?
+          What should we cover on the call?
         </label>
         <textarea
           id="message"
@@ -100,7 +99,7 @@ export function ContactForm() {
           rows={5}
           required
           className={field}
-          placeholder="Where you are, where you're trying to go, and what's getting in the way."
+          placeholder="Stage, the decision in front of you, and what you want out of a 30-minute consult."
         />
       </div>
 
@@ -113,10 +112,11 @@ export function ContactForm() {
         disabled={pending}
         className="bg-gradient-brand mt-2 inline-flex items-center justify-center rounded-full px-6 py-3.5 text-sm font-semibold text-white ring-soft transition-all hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-60 disabled:hover:translate-y-0"
       >
-        {pending ? "Sending…" : "Send message"}
+        {pending ? "Sending…" : "Request a consultation"}
       </button>
       <p className="text-xs text-muted-soft">
-        Prefer to talk? Call {site.founder.phone} or connect on LinkedIn.
+        This is for a consult, not the book waitlist. Prefer to talk now? Call{" "}
+        {site.founder.phone}.
       </p>
     </form>
   );
