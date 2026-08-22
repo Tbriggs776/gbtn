@@ -6,7 +6,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // platform secret (e.g. the Anthropic key) can never reach the browser — these
 // only run server-side, behind an admin check.
 
-export type PlatformProvider = "anthropic";
+// Providers whose secret is stored in Vault under this one key. "twilio" and
+// "callrail" store a JSON blob (see readPlatformJson) since they need several
+// values; "anthropic" stores a single API key string.
+export type PlatformProvider = "anthropic" | "twilio" | "callrail";
 
 export async function storePlatformSecret(
   provider: PlatformProvider,
@@ -27,6 +30,27 @@ export async function readPlatformSecret(provider: PlatformProvider): Promise<st
   const { data, error } = await admin.rpc("read_platform_secret", { p_provider: provider });
   if (error) throw new Error(error.message);
   return (data as string | null) ?? null;
+}
+
+/** Store a structured config (e.g. Twilio creds) as a single JSON secret. */
+export async function storePlatformJson(
+  provider: PlatformProvider,
+  config: Record<string, string>
+): Promise<void> {
+  await storePlatformSecret(provider, JSON.stringify(config));
+}
+
+/** Read a structured config back. Returns null if unset or unparseable. */
+export async function readPlatformJson<T = Record<string, string>>(
+  provider: PlatformProvider
+): Promise<T | null> {
+  const raw = await readPlatformSecret(provider);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 /** Metadata for the admin UI — configured state and the last-4 hint, never the secret. */
