@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSession, getActiveClient, sessionCan } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui";
@@ -121,6 +122,9 @@ export default async function PortalHome({
 }) {
   const { client: clientParam } = await searchParams;
   const session = await getSession();
+  // Employees have no client data — their home is the CRM. (Admins keep /portal
+  // for client oversight.)
+  if (session?.isEmployee) redirect("/portal/crm");
   const activeClient = await getActiveClient(clientParam);
 
   if (!activeClient) {

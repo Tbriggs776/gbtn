@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/auth";
+import { assertStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { sendContactEmail, sendContactSms } from "./comms";
 import { placeCall, toE164, getTwilioConfig } from "./twilio";
@@ -29,7 +29,7 @@ export async function createContact(input: {
   tags?: string[];
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const email = input.email?.trim().toLowerCase() || null;
     const { data, error } = await db
@@ -65,7 +65,7 @@ export async function updateContact(
   patch: Record<string, unknown>
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const clean = { ...patch };
     if (typeof clean.email === "string") clean.email = clean.email.trim().toLowerCase() || null;
@@ -85,7 +85,7 @@ export async function updateContact(
 
 export async function deleteContact(id: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_contacts").delete().eq("id", id);
     if (error) throw error;
@@ -106,7 +106,7 @@ export async function createCompany(input: {
   notes?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     if (!input.name?.trim()) return { ok: false, error: "Company name is required." };
     const { data, error } = await db
@@ -133,7 +133,7 @@ export async function createCompany(input: {
 
 export async function updateCompany(id: string, patch: Record<string, unknown>): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_companies").update(patch).eq("id", id);
     if (error) throw error;
@@ -155,7 +155,7 @@ export async function createDeal(input: {
   expected_close?: string | null;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     if (!input.title?.trim()) return { ok: false, error: "Deal title is required." };
     let stageId = input.stage_id ?? null;
@@ -192,7 +192,7 @@ export async function createDeal(input: {
 
 export async function moveDealStage(dealId: string, stageId: string): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const { data: deal } = await db
       .from("crm_deals")
@@ -238,7 +238,7 @@ export async function moveDealStage(dealId: string, stageId: string): Promise<Ac
 
 export async function updateDeal(id: string, patch: Record<string, unknown>): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_deals").update(patch).eq("id", id);
     if (error) throw error;
@@ -262,7 +262,7 @@ export async function logActivity(input: {
   occurred_at?: string;
 }): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const meta: Record<string, unknown> = {};
     if (input.type === "call") meta.connected = input.connected ? "true" : "false";
@@ -298,7 +298,7 @@ export async function createTask(input: {
   notes?: string;
 }): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     if (!input.title?.trim()) return { ok: false, error: "Task title is required." };
     const { error } = await db.from("crm_tasks").insert({
@@ -327,7 +327,7 @@ export async function setTaskStatus(
   status: "open" | "done" | "cancelled"
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db
       .from("crm_tasks")
@@ -348,7 +348,7 @@ export async function emailContact(input: {
   body: string;
 }): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const contact = await getContact(db, input.contact_id);
     if (!contact?.email) return { ok: false, error: "This contact has no email address." };
@@ -372,7 +372,7 @@ export async function smsContact(input: {
   body: string;
 }): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const contact = await getContact(db, input.contact_id);
     if (!contact?.phone) return { ok: false, error: "This contact has no phone number." };
@@ -396,7 +396,7 @@ export async function callContact(input: {
   agent_number: string;
 }): Promise<ActionResult> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     const contact = await getContact(db, input.contact_id);
     if (!contact?.phone) return { ok: false, error: "This contact has no phone number." };
