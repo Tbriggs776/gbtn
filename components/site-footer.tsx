@@ -44,6 +44,14 @@ export function SiteFooter() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link
+                  href="/metrics"
+                  className="text-sm text-white/70 transition-colors hover:text-white"
+                >
+                  7 metrics one-pager
+                </Link>
+              </li>
             </ul>
           </div>
 
