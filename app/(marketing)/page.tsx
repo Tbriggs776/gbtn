@@ -216,6 +216,11 @@ export default function HomePage() {
                 </span>
               ))}
             </div>
+            <div className="mt-6">
+              <Button href="/metrics" variant="light">
+                Get the one-pager <Arrow />
+              </Button>
+            </div>
           </div>
         </Container>
       </section>
