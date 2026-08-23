@@ -1,4 +1,4 @@
-// Shared CRM types, mirroring supabase/migrations/0020_crm.sql.
+// Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql.
 // The CRM is GBTN-internal (platform admin only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
@@ -67,6 +67,13 @@ export type CrmContact = {
   last_contacted_at: string | null;
   last_inbound_at: string | null;
   next_follow_up_at: string | null;
+  /** Sum of one_time won deal values. Recurring revenue is in mrr, not here. */
+  lifetime_value: number;
+  /** Monthly recurring: monthly deals + annual/12. ARR = mrr * 12. */
+  mrr: number;
+  won_deal_count: number;
+  first_won_at: string | null;
+  last_won_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -269,7 +276,7 @@ export type CrmMessage = {
   updated_at: string;
 };
 
-// ── Display helpers ──────────────────────────────────────────────────────────
+// ── Display helpers ─────────────────────────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
 

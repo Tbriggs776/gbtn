@@ -3,17 +3,112 @@
 import { revalidatePath } from "next/cache";
 import { assertAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { sendContactEmail, sendContactSms } from "./comms";
+import { sendContactEmail, sendContactSms, applyEmailUnsubscribe } from "./comms";
 import { placeCall, toE164, getTwilioConfig } from "./twilio";
 import { getContact } from "./service";
 import { appBaseUrl } from "./comms";
-import type { ActionResult, LifecycleStage } from "./types";
+import type { ActionResult, LifecycleStage, ValueType } from "./types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function fail(e: unknown): { ok: false; error: string } {
   return { ok: false, error: e instanceof Error ? e.message : "Something went wrong." };
 }
 
 const CRM = "/portal/crm";
+
+function pickAllowed(src: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined) out[k] = src[k];
+  }
+  return out;
+}
+
+const CONTACT_PATCH_KEYS = [
+  "first_name",
+  "last_name",
+  "email",
+  "phone",
+  "title",
+  "company_id",
+  "lifecycle_stage",
+  "source",
+  "notes",
+  "tags",
+  "custom",
+  "next_follow_up_at",
+] as const;
+
+const COMPANY_PATCH_KEYS = [
+  "name",
+  "domain",
+  "website",
+  "phone",
+  "industry",
+  "size",
+  "address",
+  "notes",
+  "tags",
+  "custom",
+] as const;
+
+const DEAL_PATCH_KEYS = [
+  "title",
+  "value",
+  "value_type",
+  "stage_id",
+  "contact_id",
+  "company_id",
+  "expected_close",
+  "notes",
+  "currency",
+  "lost_reason",
+  "custom",
+] as const;
+
+/**
+ * Recompute contact lifetime columns from every won deal on that contact.
+ *   lifetime_value = sum of one_time values
+ *   mrr            = monthly values + annual / 12
+ *   ARR            = mrr * 12 (not stored)
+ * Recalc also runs when a deal leaves won. If any won deals remain, lifecycle
+ * is set to customer; we do not auto-churn when the last won deal is reversed.
+ */
+export async function recalcContactLifetime(
+  db: SupabaseClient,
+  contactId: string | null | undefined
+): Promise<void> {
+  if (!contactId) return;
+  const { data: deals } = await db
+    .from("crm_deals")
+    .select("value, value_type, closed_at, created_at")
+    .eq("contact_id", contactId)
+    .eq("status", "won");
+
+  let lifetime_value = 0;
+  let mrr = 0;
+  const wonMs: number[] = [];
+  for (const d of deals ?? []) {
+    const v = Number(d.value) || 0;
+    const vt = (d.value_type as ValueType) ?? "one_time";
+    if (vt === "monthly") mrr += v;
+    else if (vt === "annual") mrr += v / 12;
+    else lifetime_value += v;
+    const stamp = (d.closed_at as string | null) ?? (d.created_at as string | null);
+    if (stamp) wonMs.push(new Date(stamp).getTime());
+  }
+  const count = deals?.length ?? 0;
+  const patch: Record<string, unknown> = {
+    won_deal_count: count,
+    lifetime_value,
+    mrr,
+    first_won_at: count && wonMs.length ? new Date(Math.min(...wonMs)).toISOString() : null,
+    last_won_at: count && wonMs.length ? new Date(Math.max(...wonMs)).toISOString() : null,
+  };
+  if (count > 0) patch.lifecycle_stage = "customer";
+  const { error } = await db.from("crm_contacts").update(patch).eq("id", contactId);
+  if (error) throw error;
+}
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
 export async function createContact(input: {
@@ -67,16 +162,32 @@ export async function updateContact(
   try {
     await assertAdmin();
     const db = await createClient();
-    const clean = { ...patch };
+    const clean = pickAllowed(patch, CONTACT_PATCH_KEYS);
     if (typeof clean.email === "string") clean.email = clean.email.trim().toLowerCase() || null;
     if (typeof clean.phone === "string") clean.phone = toE164(clean.phone) ?? clean.phone;
-    if (clean.lifecycle_stage === "disqualified" || clean.lifecycle_stage === "churned") {
-      // keep as-is
-    }
     const { error } = await db.from("crm_contacts").update(clean).eq("id", id);
     if (error) throw error;
     revalidatePath(`${CRM}/contacts/${id}`);
     revalidatePath(`${CRM}/contacts`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function optOutContact(
+  id: string,
+  channels: { email?: boolean; sms?: boolean } = { email: true }
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const db = await createClient();
+    if (channels.email) await applyEmailUnsubscribe(db, id);
+    if (channels.sms) {
+      const { error } = await db.from("crm_contacts").update({ do_not_sms: true }).eq("id", id);
+      if (error) throw error;
+    }
+    revalidatePath(`${CRM}/contacts/${id}`);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -135,7 +246,8 @@ export async function updateCompany(id: string, patch: Record<string, unknown>):
   try {
     await assertAdmin();
     const db = await createClient();
-    const { error } = await db.from("crm_companies").update(patch).eq("id", id);
+    const clean = pickAllowed(patch, COMPANY_PATCH_KEYS);
+    const { error } = await db.from("crm_companies").update(clean).eq("id", id);
     if (error) throw error;
     revalidatePath(`${CRM}/companies/${id}`);
     return { ok: true };
@@ -220,6 +332,8 @@ export async function moveDealStage(dealId: string, stageId: string): Promise<Ac
     const { error } = await db.from("crm_deals").update(patch).eq("id", dealId);
     if (error) throw error;
 
+    await recalcContactLifetime(db, deal?.contact_id as string | null);
+
     await db.from("crm_activities").insert({
       contact_id: deal?.contact_id ?? null,
       company_id: deal?.company_id ?? null,
@@ -229,6 +343,54 @@ export async function moveDealStage(dealId: string, stageId: string): Promise<Ac
       created_by: session.user.id,
       meta: { from: (fromStage?.data as { name?: string } | null)?.name ?? null, to: toStage?.name ?? null },
     });
+    revalidatePath(`${CRM}/deals`);
+    if (deal?.contact_id) revalidatePath(`${CRM}/contacts/${deal.contact_id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function markDealWon(id: string): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const db = await createClient();
+    const { data: won } = await db.from("crm_stages").select("id").eq("is_won", true).limit(1).maybeSingle();
+    if (won?.id) return moveDealStage(id, won.id as string);
+    const { data: deal } = await db.from("crm_deals").select("contact_id").eq("id", id).maybeSingle();
+    const { error } = await db
+      .from("crm_deals")
+      .update({ status: "won", closed_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+    await recalcContactLifetime(db, deal?.contact_id as string | null);
+    revalidatePath(`${CRM}/deals`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function markDealLost(id: string, lost_reason?: string): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const db = await createClient();
+    const { data: lost } = await db.from("crm_stages").select("id").eq("is_lost", true).limit(1).maybeSingle();
+    if (lost?.id) {
+      const res = await moveDealStage(id, lost.id as string);
+      if (!res.ok) return res;
+      if (lost_reason) {
+        await db.from("crm_deals").update({ lost_reason }).eq("id", id);
+      }
+      return { ok: true };
+    }
+    const { data: deal } = await db.from("crm_deals").select("contact_id").eq("id", id).maybeSingle();
+    const { error } = await db
+      .from("crm_deals")
+      .update({ status: "lost", closed_at: new Date().toISOString(), lost_reason: lost_reason ?? null })
+      .eq("id", id);
+    if (error) throw error;
+    await recalcContactLifetime(db, deal?.contact_id as string | null);
     revalidatePath(`${CRM}/deals`);
     return { ok: true };
   } catch (e) {
@@ -240,8 +402,20 @@ export async function updateDeal(id: string, patch: Record<string, unknown>): Pr
   try {
     await assertAdmin();
     const db = await createClient();
-    const { error } = await db.from("crm_deals").update(patch).eq("id", id);
-    if (error) throw error;
+    const stageId = typeof patch.stage_id === "string" ? patch.stage_id : null;
+    const clean = pickAllowed(patch, DEAL_PATCH_KEYS);
+    delete clean.stage_id;
+    if (Object.keys(clean).length) {
+      const { data: before } = await db.from("crm_deals").select("contact_id").eq("id", id).maybeSingle();
+      const { error } = await db.from("crm_deals").update(clean).eq("id", id);
+      if (error) throw error;
+      const contactId = (clean.contact_id as string | null | undefined) ?? (before?.contact_id as string | null);
+      await recalcContactLifetime(db, contactId);
+      if (before?.contact_id && before.contact_id !== clean.contact_id) {
+        await recalcContactLifetime(db, before.contact_id as string);
+      }
+    }
+    if (stageId) return moveDealStage(id, stageId);
     revalidatePath(`${CRM}/deals`);
     return { ok: true };
   } catch (e) {
@@ -405,7 +579,6 @@ export async function callContact(input: {
     const contactE164 = toE164(contact.phone);
     const cfg = await getTwilioConfig();
     if (!cfg?.fromNumber) return { ok: false, error: "No Twilio caller-ID number configured." };
-    // TwiML: when the agent answers, dial the contact, shown as our Twilio number.
     const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Connecting your Growth by the Numbers call.</Say><Dial callerId="${cfg.fromNumber}">${contactE164}</Dial></Response>`;
     const res = await placeCall({
       to: agent,
