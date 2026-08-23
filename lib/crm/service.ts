@@ -5,6 +5,8 @@ import type {
   CrmActivity,
   CrmCampaign,
   CrmCampaignStep,
+  CrmCase,
+  CrmCaseJoined,
   CrmCompany,
   CrmContact,
   CrmContactWithCompany,
@@ -208,6 +210,40 @@ export async function getContactDeals(db: DB, contactId: string): Promise<CrmDea
     .eq("contact_id", contactId)
     .order("updated_at", { ascending: false });
   return (data as CrmDeal[]) ?? [];
+}
+
+// ── Cases ────────────────────────────────────────────────────────────────────
+export async function listCases(
+  db: DB,
+  opts: { status?: string; contactId?: string; limit?: number } = {}
+): Promise<CrmCaseJoined[]> {
+  let q = db
+    .from("crm_cases")
+    .select("*, contact:crm_contacts(id, first_name, last_name)")
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(opts.limit ?? 200);
+  if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.contactId) q = q.eq("contact_id", opts.contactId);
+  const { data } = await q;
+  return (data as CrmCaseJoined[]) ?? [];
+}
+
+export async function getCase(db: DB, id: string): Promise<CrmCaseJoined | null> {
+  const { data } = await db
+    .from("crm_cases")
+    .select("*, contact:crm_contacts(id, first_name, last_name)")
+    .eq("id", id)
+    .maybeSingle();
+  return (data as CrmCaseJoined) ?? null;
+}
+
+export async function getContactCases(db: DB, contactId: string): Promise<CrmCase[]> {
+  const { data } = await db
+    .from("crm_cases")
+    .select("*")
+    .eq("contact_id", contactId)
+    .order("opened_at", { ascending: false });
+  return (data as CrmCase[]) ?? [];
 }
 
 export async function getLastEnrollment(

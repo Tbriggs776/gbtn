@@ -8,6 +8,7 @@ import {
   getContactTimeline,
   getContactTasks,
   getContactDeals,
+  getContactCases,
   getLastEnrollment,
 } from "@/lib/crm/service";
 import { contactName, contactInitials } from "@/lib/crm/types";
@@ -18,10 +19,11 @@ export default async function ContactDetail({ params }: { params: Promise<{ id: 
   const contact = await getContact(db, id);
   if (!contact) notFound();
 
-  const [timeline, tasks, deals, lastEnrollment] = await Promise.all([
+  const [timeline, tasks, deals, cases, lastEnrollment] = await Promise.all([
     getContactTimeline(db, id),
     getContactTasks(db, id),
     getContactDeals(db, id),
+    getContactCases(db, id),
     getLastEnrollment(db, id),
   ]);
 
@@ -50,7 +52,14 @@ export default async function ContactDetail({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <ContactWorkspace contact={contact} timeline={timeline} tasks={tasks} deals={deals} lastEnrollment={lastEnrollment} />
+      <ContactWorkspace
+        contact={contact}
+        timeline={timeline}
+        tasks={tasks}
+        deals={deals}
+        cases={cases}
+        lastEnrollment={lastEnrollment}
+      />
     </PortalShell>
   );
 }

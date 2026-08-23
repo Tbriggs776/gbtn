@@ -7,9 +7,9 @@ import { sendContactEmail, sendContactSms, applyEmailUnsubscribe } from "./comms
 import { placeCall, toE164, getTwilioConfig } from "./twilio";
 import { getContact } from "./service";
 import { appBaseUrl } from "./comms";
-import type { ActionResult, LifecycleStage, ValueType } from "./types";
+import type { ActionResult, CasePriority, CaseStatus, LifecycleStage, ValueType } from "./types";
 import { STAGE_NEXT_STEP_PREFIX } from "./types";
-import { completeOpenStageNextSteps, createStageNextStepTask } from "./stage-automation";
+import { addWeekdays, completeOpenStageNextSteps, createStageNextStepTask } from "./stage-automation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function fail(e: unknown): { ok: false; error: string } {
@@ -68,6 +68,17 @@ const DEAL_PATCH_KEYS = [
   "custom",
 ] as const;
 
+const CASE_PATCH_KEYS = [
+  "title",
+  "status",
+  "priority",
+  "assignee",
+  "due_at",
+  "notes",
+  "company_id",
+  "deal_id",
+] as const;
+
 /**
  * Recompute contact lifetime columns from every won deal on that contact.
  *   lifetime_value = sum of one_time values
@@ -110,6 +121,76 @@ export async function recalcContactLifetime(
   if (count > 0) patch.lifecycle_stage = "customer";
   const { error } = await db.from("crm_contacts").update(patch).eq("id", contactId);
   if (error) throw error;
+}
+
+async function logCaseActivity(
+  db: SupabaseClient,
+  input: {
+    contactId: string;
+    companyId?: string | null;
+    dealId?: string | null;
+    caseId: string;
+    subject: string;
+    createdBy: string;
+  }
+): Promise<void> {
+  const { error } = await db.from("crm_activities").insert({
+    contact_id: input.contactId,
+    company_id: input.companyId ?? null,
+    deal_id: input.dealId ?? null,
+    type: "system",
+    subject: input.subject,
+    created_by: input.createdBy,
+    meta: { case_id: input.caseId },
+  });
+  if (error) throw error;
+}
+
+async function maybeCreateOnboardingCase(
+  db: SupabaseClient,
+  deal: {
+    id: string;
+    title: string;
+    contact_id: string | null;
+    company_id: string | null;
+    owner: string | null;
+  },
+  createdBy: string
+): Promise<void> {
+  if (!deal.contact_id) return;
+  const { data: existing } = await db
+    .from("crm_cases")
+    .select("id")
+    .eq("deal_id", deal.id)
+    .eq("status", "open")
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return;
+  const title = `Onboarding — ${deal.title}`;
+  const { data, error } = await db
+    .from("crm_cases")
+    .insert({
+      contact_id: deal.contact_id,
+      company_id: deal.company_id ?? null,
+      deal_id: deal.id,
+      title,
+      status: "open",
+      priority: "normal",
+      assignee: deal.owner ?? createdBy,
+      due_at: addWeekdays(new Date(), 5).toISOString(),
+      created_by: createdBy,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await logCaseActivity(db, {
+    contactId: deal.contact_id,
+    companyId: deal.company_id,
+    dealId: deal.id,
+    caseId: data.id as string,
+    subject: `Case opened: ${title}`,
+    createdBy,
+  });
 }
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
@@ -351,7 +432,19 @@ export async function moveDealStage(
     await recalcContactLifetime(db, deal.contact_id as string | null);
 
     await completeOpenStageNextSteps(db, dealId);
-    if (!toStage.is_won && !toStage.is_lost) {
+    if (toStage.is_won) {
+      await maybeCreateOnboardingCase(
+        db,
+        {
+          id: dealId,
+          title: deal.title as string,
+          contact_id: (deal.contact_id as string | null) ?? null,
+          company_id: (deal.company_id as string | null) ?? null,
+          owner: (deal.owner as string | null) ?? null,
+        },
+        session.user.id
+      );
+    } else if (!toStage.is_lost) {
       let assignee = (deal.owner as string | null) ?? session.user.id;
       if (!deal.owner && deal.contact_id) {
         const { data: contact } = await db
@@ -382,6 +475,7 @@ export async function moveDealStage(
     });
     revalidatePath(`${CRM}/deals`);
     revalidatePath(`${CRM}/tasks`);
+    revalidatePath(`${CRM}/cases`);
     if (deal.contact_id) revalidatePath(`${CRM}/contacts/${deal.contact_id}`);
     return { ok: true };
   } catch (e) {
@@ -391,18 +485,36 @@ export async function moveDealStage(
 
 export async function markDealWon(id: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    const session = await assertAdmin();
     const db = await createClient();
     const { data: won } = await db.from("crm_stages").select("id").eq("is_won", true).limit(1).maybeSingle();
     if (won?.id) return moveDealStage(id, won.id as string);
-    const { data: deal } = await db.from("crm_deals").select("contact_id").eq("id", id).maybeSingle();
+    const { data: deal } = await db
+      .from("crm_deals")
+      .select("id, title, contact_id, company_id, owner")
+      .eq("id", id)
+      .maybeSingle();
     const { error } = await db
       .from("crm_deals")
       .update({ status: "won", closed_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw error;
     await recalcContactLifetime(db, deal?.contact_id as string | null);
+    if (deal) {
+      await maybeCreateOnboardingCase(
+        db,
+        {
+          id: deal.id as string,
+          title: deal.title as string,
+          contact_id: (deal.contact_id as string | null) ?? null,
+          company_id: (deal.company_id as string | null) ?? null,
+          owner: (deal.owner as string | null) ?? null,
+        },
+        session.user.id
+      );
+    }
     revalidatePath(`${CRM}/deals`);
+    revalidatePath(`${CRM}/cases`);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -547,6 +659,96 @@ export async function setTaskStatus(
   } catch (e) {
     return fail(e);
   }
+}
+
+// ── Cases ────────────────────────────────────────────────────────────────────
+export async function createCase(input: {
+  title: string;
+  contact_id: string;
+  company_id?: string | null;
+  deal_id?: string | null;
+  priority?: CasePriority;
+  due_at?: string | null;
+  notes?: string;
+  assignee?: string | null;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    const session = await assertAdmin();
+    const db = await createClient();
+    if (!input.title?.trim()) return { ok: false, error: "Case title is required." };
+    if (!input.contact_id) return { ok: false, error: "A contact is required." };
+    let companyId = input.company_id || null;
+    if (!companyId) {
+      const contact = await getContact(db, input.contact_id);
+      companyId = contact?.company_id ?? null;
+    }
+    const { data, error } = await db
+      .from("crm_cases")
+      .insert({
+        title: input.title.trim(),
+        contact_id: input.contact_id,
+        company_id: companyId,
+        deal_id: input.deal_id || null,
+        priority: input.priority ?? "normal",
+        due_at: input.due_at || null,
+        notes: input.notes?.trim() || null,
+        assignee: input.assignee || session.user.id,
+        created_by: session.user.id,
+      })
+      .select("id")
+      .single();
+    if (error) throw error;
+    await logCaseActivity(db, {
+      contactId: input.contact_id,
+      companyId,
+      dealId: input.deal_id || null,
+      caseId: data.id as string,
+      subject: `Case opened: ${input.title.trim()}`,
+      createdBy: session.user.id,
+    });
+    revalidatePath(`${CRM}/cases`);
+    revalidatePath(`${CRM}/contacts/${input.contact_id}`);
+    return { ok: true, data: { id: data.id as string } };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function updateCase(id: string, patch: Record<string, unknown>): Promise<ActionResult> {
+  try {
+    const session = await assertAdmin();
+    const db = await createClient();
+    const clean = pickAllowed(patch, CASE_PATCH_KEYS);
+    if (clean.status === "closed") clean.closed_at = new Date().toISOString();
+    if (clean.status && clean.status !== "closed") clean.closed_at = null;
+    const { data: before } = await db
+      .from("crm_cases")
+      .select("contact_id, company_id, deal_id, status, title")
+      .eq("id", id)
+      .maybeSingle();
+    if (!before) return { ok: false, error: "Case not found." };
+    const { error } = await db.from("crm_cases").update(clean).eq("id", id);
+    if (error) throw error;
+    if (clean.status === "closed" && before.status !== "closed") {
+      await logCaseActivity(db, {
+        contactId: before.contact_id as string,
+        companyId: before.company_id as string | null,
+        dealId: before.deal_id as string | null,
+        caseId: id,
+        subject: `Case closed: ${before.title as string}`,
+        createdBy: session.user.id,
+      });
+    }
+    revalidatePath(`${CRM}/cases`);
+    if (before.contact_id) revalidatePath(`${CRM}/contacts/${before.contact_id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function closeCase(id: string): Promise<ActionResult> {
+  return updateCase(id, { status: "closed" as CaseStatus });
 }
 
 // ── Comms (from a contact record) ────────────────────────────────────────────

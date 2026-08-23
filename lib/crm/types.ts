@@ -1,5 +1,5 @@
 // Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql
-// + 0022_crm_email_marketing.sql + 0023_crm_journeys.sql.
+// + 0022_crm_email_marketing.sql + 0023_crm_journeys.sql + 0024_crm_cases.sql.
 // The CRM is GBTN-internal (platform admin only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
@@ -185,6 +185,34 @@ export type CrmTask = {
 };
 
 export type CrmTaskJoined = CrmTask & {
+  contact?: Pick<CrmContact, "id" | "first_name" | "last_name"> | null;
+};
+
+export const CASE_STATUSES = ["open", "pending", "closed"] as const;
+export type CaseStatus = (typeof CASE_STATUSES)[number];
+
+export const CASE_PRIORITIES = ["low", "normal", "high"] as const;
+export type CasePriority = (typeof CASE_PRIORITIES)[number];
+
+export type CrmCase = {
+  id: string;
+  contact_id: string;
+  company_id: string | null;
+  deal_id: string | null;
+  title: string;
+  status: CaseStatus;
+  priority: CasePriority;
+  assignee: string | null;
+  opened_at: string;
+  due_at: string | null;
+  closed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmCaseJoined = CrmCase & {
   contact?: Pick<CrmContact, "id" | "first_name" | "last_name"> | null;
 };
 

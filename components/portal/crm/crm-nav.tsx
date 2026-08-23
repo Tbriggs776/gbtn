@@ -9,6 +9,7 @@ const TABS = [
   { label: "Companies", href: "/portal/crm/companies" },
   { label: "Deals", href: "/portal/crm/deals" },
   { label: "Tasks", href: "/portal/crm/tasks" },
+  { label: "Cases", href: "/portal/crm/cases" },
   { label: "Campaigns", href: "/portal/crm/campaigns" },
   { label: "Settings", href: "/portal/crm/settings" },
 ];
