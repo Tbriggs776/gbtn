@@ -13,6 +13,7 @@ import type {
   CrmStage,
   CrmTask,
   CrmTaskJoined,
+  CrmEnrollmentWithCampaign,
   LifecycleStage,
 } from "./types";
 
@@ -204,6 +205,20 @@ export async function getContactDeals(db: DB, contactId: string): Promise<CrmDea
     .eq("contact_id", contactId)
     .order("updated_at", { ascending: false });
   return (data as CrmDeal[]) ?? [];
+}
+
+export async function getLastEnrollment(
+  db: DB,
+  contactId: string
+): Promise<CrmEnrollmentWithCampaign | null> {
+  const { data } = await db
+    .from("crm_enrollments")
+    .select("*, campaign:crm_campaigns(id, name, status, channel)")
+    .eq("contact_id", contactId)
+    .order("enrolled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as CrmEnrollmentWithCampaign) ?? null;
 }
 
 // ── Campaigns ────────────────────────────────────────────────────────────────
