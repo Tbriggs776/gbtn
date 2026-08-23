@@ -3,14 +3,19 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PortalShell } from "@/components/portal/ui";
 import { CampaignEditor } from "@/components/portal/crm/campaign-editor";
-import { getCampaign, getCampaignSteps, getCampaignStats } from "@/lib/crm/service";
+import { getCampaign, getCampaignSteps, getCampaignStats, listSegments, listTemplates } from "@/lib/crm/service";
 
 export default async function CampaignDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const db = await createClient();
   const campaign = await getCampaign(db, id);
   if (!campaign) notFound();
-  const [steps, stats] = await Promise.all([getCampaignSteps(db, id), getCampaignStats(db, id)]);
+  const [steps, stats, segments, templates] = await Promise.all([
+    getCampaignSteps(db, id),
+    getCampaignStats(db, id),
+    listSegments(db),
+    listTemplates(db, campaign.channel),
+  ]);
 
   return (
     <PortalShell wide>
@@ -23,7 +28,7 @@ export default async function CampaignDetail({ params }: { params: Promise<{ id:
           {campaign.channel} · {campaign.type}
         </p>
       </div>
-      <CampaignEditor campaign={campaign} steps={steps} stats={stats} />
+      <CampaignEditor campaign={campaign} steps={steps} stats={stats} segments={segments} templates={templates} />
     </PortalShell>
   );
 }
