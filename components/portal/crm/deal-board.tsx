@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Button, ErrorText, Field, Modal, Select, TextInput } from "./ui";
+import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from "./ui";
 import { createDeal, moveDealStage } from "@/lib/crm/actions";
 import { formatCurrency } from "@/lib/format";
 import type { CrmDealJoined, CrmStage } from "@/lib/crm/types";
@@ -28,8 +28,27 @@ export function DealBoard({
   const [overStage, setOverStage] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [localDeals, setLocalDeals] = useState(deals);
+  const [lostMove, setLostMove] = useState<{ dealId: string; stageId: string; stageName: string } | null>(null);
+  const [lostReason, setLostReason] = useState("");
+  const [lostError, setLostError] = useState("");
 
   const byStage = (stageId: string) => localDeals.filter((d) => d.stage_id === stageId);
+
+  function applyMove(id: string, stageId: string, lost_reason?: string) {
+    setLocalDeals((prev) => prev.map((d) => (d.id === id ? { ...d, stage_id: stageId } : d)));
+    start(async () => {
+      const res = await moveDealStage(id, stageId, lost_reason);
+      if (!res.ok) {
+        setLocalDeals(deals);
+        if (lost_reason !== undefined) setLostError(res.error);
+      } else {
+        setLostMove(null);
+        setLostReason("");
+        setLostError("");
+      }
+      router.refresh();
+    });
+  }
 
   function drop(stageId: string) {
     setOverStage(null);
@@ -38,15 +57,23 @@ export function DealBoard({
     if (!id) return;
     const deal = localDeals.find((d) => d.id === id);
     if (!deal || deal.stage_id === stageId) return;
-    // Optimistic move.
-    setLocalDeals((prev) => prev.map((d) => (d.id === id ? { ...d, stage_id: stageId } : d)));
-    start(async () => {
-      const res = await moveDealStage(id, stageId);
-      if (!res.ok) {
-        setLocalDeals(deals); // revert
-      }
-      router.refresh();
-    });
+    const stage = stages.find((s) => s.id === stageId);
+    if (stage?.is_lost) {
+      setLostError("");
+      setLostReason("");
+      setLostMove({ dealId: id, stageId, stageName: stage.name });
+      return;
+    }
+    applyMove(id, stageId);
+  }
+
+  function confirmLost() {
+    if (!lostMove) return;
+    if (!lostReason.trim()) {
+      setLostError("Lost reason is required.");
+      return;
+    }
+    applyMove(lostMove.dealId, lostMove.stageId, lostReason.trim());
   }
 
   const stageTotal = (stageId: string) =>
@@ -114,6 +141,43 @@ export function DealBoard({
         contacts={contacts}
         companies={companies}
       />
+
+      <Modal
+        open={!!lostMove}
+        onClose={() => {
+          setLostMove(null);
+          setLostReason("");
+          setLostError("");
+        }}
+        title={lostMove ? `Mark as ${lostMove.stageName}` : "Lost reason"}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted">Why was this deal lost? Required before it can move to Lost.</p>
+          <Field label="Lost reason">
+            <TextArea
+              value={lostReason}
+              onChange={(e) => setLostReason(e.target.value)}
+              placeholder="e.g. Chose another vendor, budget cut, went dark…"
+            />
+          </Field>
+          <ErrorText>{lostError}</ErrorText>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setLostMove(null);
+                setLostReason("");
+                setLostError("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmLost} disabled={!lostReason.trim()}>
+              Move to Lost
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }
