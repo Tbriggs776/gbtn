@@ -8,6 +8,8 @@ import { placeCall, toE164, getTwilioConfig } from "./twilio";
 import { getContact } from "./service";
 import { appBaseUrl } from "./comms";
 import type { ActionResult, LifecycleStage, ValueType } from "./types";
+import { STAGE_NEXT_STEP_PREFIX } from "./types";
+import { completeOpenStageNextSteps, createStageNextStepTask } from "./stage-automation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function fail(e: unknown): { ok: false; error: string } {
@@ -302,29 +304,43 @@ export async function createDeal(input: {
   }
 }
 
-export async function moveDealStage(dealId: string, stageId: string): Promise<ActionResult> {
+export async function moveDealStage(
+  dealId: string,
+  stageId: string,
+  lost_reason?: string
+): Promise<ActionResult> {
   try {
     const session = await assertAdmin();
     const db = await createClient();
     const { data: deal } = await db
       .from("crm_deals")
-      .select("stage_id, contact_id, company_id")
+      .select("stage_id, contact_id, company_id, title, owner")
       .eq("id", dealId)
       .maybeSingle();
+    if (!deal) return { ok: false, error: "Deal not found." };
+    if (deal.stage_id === stageId) return { ok: true };
+
     const [{ data: toStage }, fromStage] = await Promise.all([
       db.from("crm_stages").select("name, is_won, is_lost").eq("id", stageId).maybeSingle(),
-      deal?.stage_id
+      deal.stage_id
         ? db.from("crm_stages").select("name").eq("id", deal.stage_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ]);
+    if (!toStage) return { ok: false, error: "Stage not found." };
+
+    const reason = lost_reason?.trim() ?? "";
+    if (toStage.is_lost && !reason) {
+      return { ok: false, error: "Lost reason is required." };
+    }
 
     const patch: Record<string, unknown> = { stage_id: stageId };
-    if (toStage?.is_won) {
+    if (toStage.is_won) {
       patch.status = "won";
       patch.closed_at = new Date().toISOString();
-    } else if (toStage?.is_lost) {
+    } else if (toStage.is_lost) {
       patch.status = "lost";
       patch.closed_at = new Date().toISOString();
+      patch.lost_reason = reason;
     } else {
       patch.status = "open";
       patch.closed_at = null;
@@ -332,19 +348,41 @@ export async function moveDealStage(dealId: string, stageId: string): Promise<Ac
     const { error } = await db.from("crm_deals").update(patch).eq("id", dealId);
     if (error) throw error;
 
-    await recalcContactLifetime(db, deal?.contact_id as string | null);
+    await recalcContactLifetime(db, deal.contact_id as string | null);
+
+    await completeOpenStageNextSteps(db, dealId);
+    if (!toStage.is_won && !toStage.is_lost) {
+      let assignee = (deal.owner as string | null) ?? session.user.id;
+      if (!deal.owner && deal.contact_id) {
+        const { data: contact } = await db
+          .from("crm_contacts")
+          .select("owner")
+          .eq("id", deal.contact_id)
+          .maybeSingle();
+        if (contact?.owner) assignee = contact.owner as string;
+      }
+      await createStageNextStepTask(db, {
+        dealId,
+        title: `${STAGE_NEXT_STEP_PREFIX} ${toStage.name} — ${deal.title as string}`,
+        contactId: (deal.contact_id as string | null) ?? null,
+        companyId: (deal.company_id as string | null) ?? null,
+        assignee,
+        createdBy: session.user.id,
+      });
+    }
 
     await db.from("crm_activities").insert({
-      contact_id: deal?.contact_id ?? null,
-      company_id: deal?.company_id ?? null,
+      contact_id: deal.contact_id ?? null,
+      company_id: deal.company_id ?? null,
       deal_id: dealId,
       type: "stage_change",
-      subject: `Moved to ${toStage?.name ?? "stage"}`,
+      subject: `Moved to ${toStage.name ?? "stage"}`,
       created_by: session.user.id,
-      meta: { from: (fromStage?.data as { name?: string } | null)?.name ?? null, to: toStage?.name ?? null },
+      meta: { from: (fromStage?.data as { name?: string } | null)?.name ?? null, to: toStage.name ?? null },
     });
     revalidatePath(`${CRM}/deals`);
-    if (deal?.contact_id) revalidatePath(`${CRM}/contacts/${deal.contact_id}`);
+    revalidatePath(`${CRM}/tasks`);
+    if (deal.contact_id) revalidatePath(`${CRM}/contacts/${deal.contact_id}`);
     return { ok: true };
   } catch (e) {
     return fail(e);
@@ -375,14 +413,10 @@ export async function markDealLost(id: string, lost_reason?: string): Promise<Ac
   try {
     await assertAdmin();
     const db = await createClient();
+    if (!lost_reason?.trim()) return { ok: false, error: "Lost reason is required." };
     const { data: lost } = await db.from("crm_stages").select("id").eq("is_lost", true).limit(1).maybeSingle();
     if (lost?.id) {
-      const res = await moveDealStage(id, lost.id as string);
-      if (!res.ok) return res;
-      if (lost_reason) {
-        await db.from("crm_deals").update({ lost_reason }).eq("id", id);
-      }
-      return { ok: true };
+      return moveDealStage(id, lost.id as string, lost_reason);
     }
     const { data: deal } = await db.from("crm_deals").select("contact_id").eq("id", id).maybeSingle();
     const { error } = await db

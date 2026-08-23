@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Badge, Button, ErrorText, Field, Select, TextArea, TextInput } from "./ui";
+import { Contact360 } from "./contact-360";
 import {
   emailContact,
   smsContact,
@@ -21,6 +22,7 @@ import {
   type CrmContactWithCompany,
   type CrmTask,
   type CrmDeal,
+  type CrmEnrollmentWithCampaign,
 } from "@/lib/crm/types";
 import { formatDate, relativeTime, formatCurrency } from "@/lib/format";
 
@@ -43,15 +45,18 @@ export function ContactWorkspace({
   timeline,
   tasks,
   deals,
+  lastEnrollment,
 }: {
   contact: CrmContactWithCompany;
   timeline: CrmActivity[];
   tasks: CrmTask[];
   deals: CrmDeal[];
+  lastEnrollment: CrmEnrollmentWithCampaign | null;
 }) {
   return (
     <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="flex flex-col gap-5">
+        <Contact360 contact={contact} deals={deals} lastEnrollment={lastEnrollment} />
         <Composer contact={contact} />
         <Timeline items={timeline} />
       </div>
@@ -371,6 +376,9 @@ function Details({ contact }: { contact: CrmContactWithCompany }) {
           <Row label="Source" value={contact.source} />
           <Row label="Last attempt" value={contact.last_attempt_at ? relativeTime(contact.last_attempt_at) : "—"} />
           <Row label="Last connected" value={contact.last_contacted_at ? relativeTime(contact.last_contacted_at) : "—"} />
+          <Row label="Lifetime value" value={formatCurrency(Number(contact.lifetime_value || 0))} />
+          <Row label="MRR" value={formatCurrency(Number(contact.mrr || 0))} />
+          <Row label="Won deals" value={String(contact.won_deal_count ?? 0)} />
         </dl>
         <div className="flex flex-col gap-2 border-t border-line pt-3">
           <label className="flex items-center justify-between text-sm text-muted">

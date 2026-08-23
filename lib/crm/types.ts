@@ -187,6 +187,10 @@ export type CrmTaskJoined = CrmTask & {
   contact?: Pick<CrmContact, "id" | "first_name" | "last_name"> | null;
 };
 
+/** Open follow-up created when a deal moves to a non-terminal stage. */
+export const STAGE_NEXT_STEP_PREFIX = "Next step:";
+export const STAGE_NEXT_STEP_NOTE = "stage_next_step";
+
 export type Channel = "email" | "sms";
 export const CAMPAIGN_TYPES = ["blast", "drip"] as const;
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
@@ -247,6 +251,10 @@ export type CrmEnrollment = {
   completed_at: string | null;
 };
 
+export type CrmEnrollmentWithCampaign = CrmEnrollment & {
+  campaign?: Pick<CrmCampaign, "id" | "name" | "status" | "channel"> | null;
+};
+
 export type MessageStatus =
   | "queued"
   | "sent"
@@ -276,7 +284,7 @@ export type CrmMessage = {
   updated_at: string;
 };
 
-// ── Display helpers ─────────────────────────────────────────
+// ── Display helpers ─────────────────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
 
