@@ -1,5 +1,5 @@
 // Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql
-// + 0022_crm_email_marketing.sql.
+// + 0022_crm_email_marketing.sql + 0023_crm_journeys.sql.
 // The CRM is GBTN-internal (platform admin only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
@@ -223,6 +223,12 @@ export type CrmCampaign = {
   updated_at: string;
 };
 
+export const STEP_KINDS = ["send", "wait_event", "exit"] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+export const WAIT_EVENTS = ["opened", "clicked", "replied", "stage_changed"] as const;
+export type WaitEvent = (typeof WAIT_EVENTS)[number];
+
 export type CrmCampaignStep = {
   id: string;
   campaign_id: string;
@@ -231,6 +237,11 @@ export type CrmCampaignStep = {
   channel: Channel;
   subject: string | null;
   body: string;
+  kind: StepKind;
+  wait_event: WaitEvent | null;
+  wait_hours: number | null;
+  next_yes: number | null;
+  next_no: number | null;
   created_at: string;
 };
 
@@ -269,6 +280,11 @@ export type EnrollmentStatus =
   | "failed"
   | "cancelled";
 
+export type EnrollmentContext = {
+  enrolled_stage?: string | null;
+  wait_until?: string;
+};
+
 export type CrmEnrollment = {
   id: string;
   campaign_id: string;
@@ -278,6 +294,7 @@ export type CrmEnrollment = {
   next_run_at: string | null;
   enrolled_at: string;
   completed_at: string | null;
+  context: EnrollmentContext;
 };
 
 export type CrmEnrollmentWithCampaign = CrmEnrollment & {
@@ -313,7 +330,7 @@ export type CrmMessage = {
   updated_at: string;
 };
 
-// ── Display helpers ─────────────────────────────
+// ── Display helpers ─────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
 
