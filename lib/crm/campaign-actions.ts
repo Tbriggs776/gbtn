@@ -9,7 +9,7 @@ import {
   resolveAudience,
   sendBlast,
 } from "./campaign-engine";
-import type { ActionResult, Channel } from "./types";
+import type { ActionResult, Channel, StepKind, WaitEvent } from "./types";
 
 const CRM = "/portal/crm";
 
@@ -73,7 +73,18 @@ export async function updateCampaign(id: string, patch: Record<string, unknown>)
 
 export async function saveCampaignSteps(
   campaignId: string,
-  steps: { position: number; delay_minutes: number; channel: "email" | "sms"; subject?: string; body: string }[]
+  steps: {
+    position: number;
+    delay_minutes: number;
+    channel: "email" | "sms";
+    subject?: string;
+    body: string;
+    kind?: StepKind;
+    wait_event?: WaitEvent | null;
+    wait_hours?: number | null;
+    next_yes?: number | null;
+    next_no?: number | null;
+  }[]
 ): Promise<ActionResult> {
   try {
     await assertAdmin();
@@ -87,6 +98,11 @@ export async function saveCampaignSteps(
         channel: s.channel,
         subject: s.subject?.trim() || null,
         body: s.body ?? "",
+        kind: s.kind ?? "send",
+        wait_event: s.kind === "wait_event" ? s.wait_event ?? null : null,
+        wait_hours: s.kind === "wait_event" && s.wait_hours != null ? Number(s.wait_hours) : null,
+        next_yes: s.next_yes == null || s.next_yes === ("" as unknown) ? null : Number(s.next_yes),
+        next_no: s.next_no == null || s.next_no === ("" as unknown) ? null : Number(s.next_no),
       }));
       const { error } = await db.from("crm_campaign_steps").insert(rows);
       if (error) throw error;
