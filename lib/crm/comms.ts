@@ -138,6 +138,7 @@ export async function sendContactEmail(
     body: text ?? html,
     status: res.ok ? "sent" : "failed",
     provider: "resend",
+    provider_id: res.id ?? null,
     error: res.ok ? null : res.error ?? null,
   });
 
@@ -150,7 +151,7 @@ export async function sendContactEmail(
       subject,
       body: text ?? html,
       created_by: ctx.createdBy ?? null,
-      meta: { campaign_id: ctx.campaignId ?? null, delivered: res.ok },
+      meta: { campaign_id: ctx.campaignId ?? null, delivered: res.ok, provider_id: res.id ?? null },
     });
   }
   return res.ok ? { ok: true } : { ok: false, error: res.error };
