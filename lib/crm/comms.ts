@@ -1,4 +1,5 @@
 import "server-only";
+import { createHmac, timingSafeEqual } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail, emailLayout } from "@/lib/email";
 import { sendSms } from "./twilio";
@@ -27,12 +28,71 @@ export function renderTemplate(tpl: string, vars: Record<string, string | null |
   return tpl.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k: string) => vars[k]?.toString() ?? "");
 }
 
+const UNSUB_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+function unsubscribeSecret(): string | null {
+  return process.env.UNSUBSCRIBE_SECRET || process.env.CRON_SECRET || null;
+}
+
+/** HMAC-SHA256 token: contactId.expiryMs.sig — covers id + expiry. */
+export function signUnsubscribeToken(contactId: string, expiresAt = Date.now() + UNSUB_TTL_MS): string {
+  const secret = unsubscribeSecret();
+  if (!secret) {
+    throw new Error("UNSUBSCRIBE_SECRET (or CRON_SECRET) is required to sign unsubscribe links.");
+  }
+  const payload = `${contactId}.${expiresAt}`;
+  const sig = createHmac("sha256", secret).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+export function verifyUnsubscribeToken(token: string): { contactId: string } | null {
+  const secret = unsubscribeSecret();
+  if (!secret || !token) return null;
+  const lastDot = token.lastIndexOf(".");
+  if (lastDot <= 0) return null;
+  const payload = token.slice(0, lastDot);
+  const sig = token.slice(lastDot + 1);
+  const expDot = payload.lastIndexOf(".");
+  if (expDot <= 0) return null;
+  const contactId = payload.slice(0, expDot);
+  const expiresAt = Number(payload.slice(expDot + 1));
+  if (!contactId || !Number.isFinite(expiresAt)) return null;
+  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  if (expiresAt < Date.now()) return null;
+  return { contactId };
+}
+
+export function unsubscribeUrl(contactId: string): string {
+  return `${appBaseUrl()}/api/unsubscribe?t=${encodeURIComponent(signUnsubscribeToken(contactId))}`;
+}
+
+/** Persist email opt-out + pause active enrollments. Service-role or admin client. */
+export async function applyEmailUnsubscribe(db: DB, contactId: string): Promise<void> {
+  const { error } = await db
+    .from("crm_contacts")
+    .update({ do_not_email: true, unsubscribed_at: new Date().toISOString() })
+    .eq("id", contactId);
+  if (error) throw error;
+  await db
+    .from("crm_enrollments")
+    .update({ status: "unsubscribed" })
+    .eq("contact_id", contactId)
+    .eq("status", "active");
+}
+
 type SendCtx = {
   contactId: string | null;
   campaignId?: string | null;
   createdBy?: string | null;
   dealId?: string | null;
 };
+
+function withUnsubFooter(html: string, url: string): string {
+  return `${html}<p style="margin-top:28px;font-size:12px;color:#9a958c;line-height:1.5;">You received this because you are in our CRM. <a href="${url}" style="color:#9a958c;">Unsubscribe</a>.</p>`;
+}
 
 export async function sendContactEmail(
   db: DB,
@@ -46,7 +106,25 @@ export async function sendContactEmail(
     wrap = true,
   }: { to: string; subject: string; html: string; text?: string; replyTo?: string; wrap?: boolean }
 ): Promise<{ ok: boolean; error?: string }> {
-  const finalHtml = wrap ? emailLayout({ heading: subject, bodyHtml: html }) : html;
+  let bodyHtml = html;
+  if (ctx.contactId) {
+    const secret = unsubscribeSecret();
+    if (!secret) {
+      if (process.env.NODE_ENV === "production") {
+        return { ok: false, error: "Unsubscribe signing secret is not configured." };
+      }
+    } else {
+      try {
+        bodyHtml = withUnsubFooter(html, unsubscribeUrl(ctx.contactId));
+      } catch (e) {
+        if (process.env.NODE_ENV === "production") {
+          return { ok: false, error: e instanceof Error ? e.message : "Unsubscribe link failed." };
+        }
+      }
+    }
+  }
+
+  const finalHtml = wrap ? emailLayout({ heading: subject, bodyHtml }) : bodyHtml;
   const res = await sendEmail({ to, subject, html: finalHtml, replyTo });
 
   await db.from("crm_messages").insert({
@@ -111,6 +189,79 @@ export async function sendContactSms(
     });
   }
   return res.ok ? { ok: true } : { ok: false, error: res.error };
+}
+
+/**
+ * Due CRM task reminders. Email channel still pages the assignee (existing
+ * behavior). SMS goes to the related contact via sendContactSms (honors
+ * do_not_sms). Email-channel contacts also get sendContactEmail when they
+ * have an address and are not opted out. Stamps reminded_at either way.
+ */
+export async function processTaskReminders(db: DB, limit = 200): Promise<number> {
+  const now = new Date().toISOString();
+  const { data: tasks } = await db
+    .from("crm_tasks")
+    .select("id, title, due_at, assignee, contact_id, remind_channel")
+    .eq("status", "open")
+    .in("remind_channel", ["email", "sms"])
+    .not("reminder_at", "is", null)
+    .lte("reminder_at", now)
+    .is("reminded_at", null)
+    .limit(limit);
+
+  let sent = 0;
+  for (const t of tasks ?? []) {
+    const due = t.due_at ? new Date(t.due_at as string).toLocaleString("en-US") : "no due date";
+    const channel = t.remind_channel as string;
+
+    if (channel === "email" && t.assignee) {
+      const { data } = await db.auth.admin.getUserById(t.assignee as string);
+      const email = data?.user?.email ?? null;
+      if (email) {
+        const link = t.contact_id
+          ? `${appBaseUrl()}/portal/crm/contacts/${t.contact_id}`
+          : `${appBaseUrl()}/portal/crm/tasks`;
+        await sendEmail({
+          to: email,
+          subject: `Reminder: ${t.title}`,
+          html: emailLayout({
+            heading: "Task reminder",
+            bodyHtml: `<p><strong>${t.title}</strong></p><p>Due: ${due}</p>`,
+            ctaLabel: "Open in CRM",
+            ctaUrl: link,
+          }),
+        });
+      }
+    }
+
+    if (t.contact_id) {
+      const { data: contact } = await db
+        .from("crm_contacts")
+        .select("email, phone, do_not_email, do_not_sms")
+        .eq("id", t.contact_id)
+        .maybeSingle();
+      if (contact) {
+        const ctx = { contactId: t.contact_id as string };
+        if (channel === "email" && contact.email && !contact.do_not_email) {
+          await sendContactEmail(db, ctx, {
+            to: contact.email as string,
+            subject: `Reminder: ${t.title}`,
+            html: `<p><strong>${t.title}</strong></p><p>Due: ${due}</p>`,
+          });
+        }
+        if (channel === "sms" && contact.phone && !contact.do_not_sms) {
+          await sendContactSms(db, ctx, {
+            to: contact.phone as string,
+            body: `Reminder: ${t.title} (due ${due})`,
+          });
+        }
+      }
+    }
+
+    await db.from("crm_tasks").update({ reminded_at: now }).eq("id", t.id);
+    sent++;
+  }
+  return sent;
 }
 
 /** Record an inbound SMS (from the Twilio webhook). Service-role db. */
