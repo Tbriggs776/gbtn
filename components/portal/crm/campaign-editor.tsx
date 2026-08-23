@@ -17,14 +17,57 @@ import { aiDraftCampaign } from "@/lib/crm/ai-actions";
 import {
   LIFECYCLE_STAGES,
   LIFECYCLE_LABEL,
+  STEP_KINDS,
+  WAIT_EVENTS,
   type CampaignStats,
   type CrmCampaign,
   type CrmCampaignStep,
   type CrmSegment,
   type CrmTemplate,
+  type StepKind,
+  type WaitEvent,
 } from "@/lib/crm/types";
 
-type Step = { position: number; delay_minutes: number; channel: "email" | "sms"; subject: string; body: string };
+type Step = {
+  position: number;
+  delay_minutes: number;
+  channel: "email" | "sms";
+  subject: string;
+  body: string;
+  kind: StepKind;
+  wait_event: WaitEvent | "";
+  wait_hours: number | "";
+  next_yes: number | "";
+  next_no: number | "";
+};
+
+function emptyStep(channel: "email" | "sms", position: number, delay_minutes: number): Step {
+  return {
+    position,
+    delay_minutes,
+    channel,
+    subject: "",
+    body: "",
+    kind: "send",
+    wait_event: "",
+    wait_hours: "",
+    next_yes: "",
+    next_no: "",
+  };
+}
+
+function stepHint(st: Step): string {
+  if (st.kind === "exit") return "Completes the enrollment when reached.";
+  if (st.kind === "wait_event") {
+    const ev = st.wait_event || "the event";
+    const hrs = st.wait_hours === "" ? "no timeout" : `${st.wait_hours}h timeout`;
+    const yes = st.next_yes === "" ? "next position" : `step ${Number(st.next_yes) + 1}`;
+    const no = st.next_no === "" ? "next position" : `step ${Number(st.next_no) + 1}`;
+    return `Wait for ${ev} (${hrs}). If it happens → ${yes}; else → ${no}.`;
+  }
+  const next = st.next_yes === "" ? "the next position" : `step ${Number(st.next_yes) + 1}`;
+  return `Send this message, then continue to ${next}.`;
+}
 
 export function CampaignEditor({
   campaign,
@@ -60,6 +103,11 @@ export function CampaignEditor({
       channel: s.channel,
       subject: s.subject ?? "",
       body: s.body,
+      kind: s.kind ?? "send",
+      wait_event: s.wait_event ?? "",
+      wait_hours: s.wait_hours ?? "",
+      next_yes: s.next_yes ?? "",
+      next_no: s.next_no ?? "",
     }))
   );
   const [scheduleAt, setScheduleAt] = useState("");
@@ -77,6 +125,21 @@ export function CampaignEditor({
       if (audience.tag) a.tag = audience.tag;
     }
     return a;
+  }
+
+  function stepsPayload() {
+    return steps.map((s, i) => ({
+      position: i,
+      delay_minutes: s.delay_minutes,
+      channel: s.channel,
+      subject: s.subject,
+      body: s.body,
+      kind: s.kind,
+      wait_event: s.wait_event || null,
+      wait_hours: s.wait_hours === "" ? null : Number(s.wait_hours),
+      next_yes: s.next_yes === "" ? null : Number(s.next_yes),
+      next_no: s.next_no === "" ? null : Number(s.next_no),
+    }));
   }
 
   function saveBlast() {
@@ -98,7 +161,7 @@ export function CampaignEditor({
     setMsg("");
     start(async () => {
       await updateCampaign(campaign.id, { audience: persistAudience() });
-      const res = await saveCampaignSteps(campaign.id, steps);
+      const res = await saveCampaignSteps(campaign.id, stepsPayload());
       setBusy("");
       if (!res.ok) return setError(res.error);
       setMsg("Sequence saved.");
@@ -152,7 +215,7 @@ export function CampaignEditor({
     setBusy("activate");
     start(async () => {
       await updateCampaign(campaign.id, { audience: persistAudience() });
-      await saveCampaignSteps(campaign.id, steps);
+      await saveCampaignSteps(campaign.id, stepsPayload());
       const res = await enrollAudience(campaign.id, persistAudience());
       setBusy("");
       if (!res.ok) return setError(res.error);
@@ -293,26 +356,29 @@ export function CampaignEditor({
         ) : (
           <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-ink">Sequence steps</h2>
+              <h2 className="text-sm font-bold text-ink">Journey steps</h2>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() =>
-                  setSteps((s) => [
-                    ...s,
-                    { position: s.length, delay_minutes: s.length === 0 ? 0 : 1440, channel: campaign.channel, subject: "", body: "" },
-                  ])
+                  setSteps((s) => [...s, emptyStep(campaign.channel, s.length, s.length === 0 ? 0 : 1440)])
                 }
               >
                 + Add step
               </Button>
             </div>
+            <p className="mt-2 text-xs text-muted-soft">
+              Send, then wait for open/click/reply/stage change, then branch. Yes/No are 0-based step positions
+              (step 1 = 0). Linear drips stay send → next position.
+            </p>
             <div className="mt-3 flex flex-col gap-4">
               {steps.length === 0 ? <p className="text-sm text-muted-soft">No steps yet. Add the first message.</p> : null}
               {steps.map((st, i) => (
                 <div key={i} className="rounded-xl border border-line p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted">Step {i + 1}</span>
+                    <span className="text-xs font-bold text-muted">
+                      Step {i + 1} <span className="font-medium text-muted-soft">(position {i})</span>
+                    </span>
                     <button
                       onClick={() => setSteps((s) => s.filter((_, j) => j !== i))}
                       className="text-xs text-red-600 hover:underline"
@@ -320,8 +386,23 @@ export function CampaignEditor({
                       Remove
                     </button>
                   </div>
+                  <p className="mb-2 text-xs text-muted-soft">{stepHint(st)}</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Delay (minutes after enrollment)">
+                    <Field label="Kind">
+                      <Select
+                        value={st.kind}
+                        onChange={(e) =>
+                          setSteps((s) => s.map((x, j) => (j === i ? { ...x, kind: e.target.value as StepKind } : x)))
+                        }
+                      >
+                        {STEP_KINDS.map((k) => (
+                          <option key={k} value={k}>
+                            {k === "wait_event" ? "Wait for event" : k === "exit" ? "Exit" : "Send"}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Delay (minutes before this step)">
                       <TextInput
                         type="number"
                         value={String(st.delay_minutes)}
@@ -330,19 +411,81 @@ export function CampaignEditor({
                         }
                       />
                     </Field>
-                    <Field label="Channel">
-                      <Select
-                        value={st.channel}
+                    {st.kind === "send" ? (
+                      <Field label="Channel">
+                        <Select
+                          value={st.channel}
+                          onChange={(e) =>
+                            setSteps((s) => s.map((x, j) => (j === i ? { ...x, channel: e.target.value as "email" | "sms" } : x)))
+                          }
+                        >
+                          <option value="email">Email</option>
+                          <option value="sms">SMS</option>
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {st.kind === "wait_event" ? (
+                      <>
+                        <Field label="Wait for">
+                          <Select
+                            value={st.wait_event}
+                            onChange={(e) =>
+                              setSteps((s) =>
+                                s.map((x, j) => (j === i ? { ...x, wait_event: e.target.value as WaitEvent | "" } : x))
+                              )
+                            }
+                          >
+                            <option value="">Choose event…</option>
+                            {WAIT_EVENTS.map((ev) => (
+                              <option key={ev} value={ev}>
+                                {ev === "stage_changed" ? "Stage changed" : ev}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                        <Field label="Wait hours (timeout → No path)">
+                          <TextInput
+                            type="number"
+                            value={String(st.wait_hours)}
+                            onChange={(e) =>
+                              setSteps((s) =>
+                                s.map((x, j) =>
+                                  j === i ? { ...x, wait_hours: e.target.value === "" ? "" : Number(e.target.value) } : x
+                                )
+                              )
+                            }
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+                    <Field label="Next yes (position)">
+                      <TextInput
+                        type="number"
+                        placeholder="default: +1"
+                        value={String(st.next_yes)}
                         onChange={(e) =>
-                          setSteps((s) => s.map((x, j) => (j === i ? { ...x, channel: e.target.value as "email" | "sms" } : x)))
+                          setSteps((s) =>
+                            s.map((x, j) => (j === i ? { ...x, next_yes: e.target.value === "" ? "" : Number(e.target.value) } : x))
+                          )
                         }
-                      >
-                        <option value="email">Email</option>
-                        <option value="sms">SMS</option>
-                      </Select>
+                      />
                     </Field>
+                    {st.kind === "wait_event" ? (
+                      <Field label="Next no (position)">
+                        <TextInput
+                          type="number"
+                          placeholder="default: +1"
+                          value={String(st.next_no)}
+                          onChange={(e) =>
+                            setSteps((s) =>
+                              s.map((x, j) => (j === i ? { ...x, next_no: e.target.value === "" ? "" : Number(e.target.value) } : x))
+                            )
+                          }
+                        />
+                      </Field>
+                    ) : null}
                   </div>
-                  {st.channel === "email" ? (
+                  {st.kind === "send" && st.channel === "email" ? (
                     <div className="mt-2">
                       <TextInput
                         placeholder="Subject"
@@ -351,13 +494,15 @@ export function CampaignEditor({
                       />
                     </div>
                   ) : null}
-                  <div className="mt-2">
-                    <TextArea
-                      placeholder="Message body… {{first_name}}"
-                      value={st.body}
-                      onChange={(e) => setSteps((s) => s.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))}
-                    />
-                  </div>
+                  {st.kind === "send" ? (
+                    <div className="mt-2">
+                      <TextArea
+                        placeholder="Message body… {{first_name}}"
+                        value={st.body}
+                        onChange={(e) => setSteps((s) => s.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               ))}
               <div className="flex justify-end">
