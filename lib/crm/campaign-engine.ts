@@ -9,6 +9,9 @@ import type { CrmCampaign, CrmCampaignStep, CrmContact } from "./types";
 
 type DB = SupabaseClient;
 
+/** Contacts processed per cron/send tick so a blast cannot hold one request. */
+export const BLAST_BATCH_SIZE = 75;
+
 function mergeVars(c: Pick<CrmContact, "first_name" | "last_name" | "email" | "company_id">) {
   return {
     first_name: c.first_name ?? "there",
@@ -17,19 +20,53 @@ function mergeVars(c: Pick<CrmContact, "first_name" | "last_name" | "email" | "c
   };
 }
 
+function audienceFilter(audience: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (typeof audience.stage === "string") out.stage = audience.stage;
+  if (typeof audience.tag === "string") out.tag = audience.tag;
+  if (typeof audience.source === "string") out.source = audience.source;
+  return out;
+}
+
+export function blastOffset(audience: Record<string, unknown>): number {
+  const n = Number(audience._blast_offset);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/** Load saved-segment filter when audience.segment_id is set; else ad-hoc keys. */
+export async function resolveAudienceFilter(
+  db: DB,
+  audience: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  if (typeof audience.segment_id === "string" && audience.segment_id) {
+    const { data } = await db
+      .from("crm_segments")
+      .select("filter")
+      .eq("id", audience.segment_id)
+      .maybeSingle();
+    const filter = (data?.filter as Record<string, unknown> | undefined) ?? {};
+    return audienceFilter(filter);
+  }
+  return audienceFilter(audience);
+}
+
 /** Resolve an audience filter to contact rows eligible for a channel. */
 export async function resolveAudience(
   db: DB,
   audience: Record<string, unknown>,
-  channel: "email" | "sms"
+  channel: "email" | "sms",
+  opts: { offset?: number; limit?: number } = {}
 ): Promise<CrmContact[]> {
-  let q = db.from("crm_contacts").select("*");
-  if (typeof audience.stage === "string") q = q.eq("lifecycle_stage", audience.stage);
-  if (typeof audience.tag === "string") q = q.contains("tags", [audience.tag]);
-  if (typeof audience.source === "string") q = q.eq("source", audience.source);
+  const filter = await resolveAudienceFilter(db, audience);
+  const limit = opts.limit ?? 5000;
+  const offset = opts.offset ?? 0;
+  let q = db.from("crm_contacts").select("*").order("id", { ascending: true });
+  if (typeof filter.stage === "string") q = q.eq("lifecycle_stage", filter.stage);
+  if (typeof filter.tag === "string") q = q.contains("tags", [filter.tag]);
+  if (typeof filter.source === "string") q = q.eq("source", filter.source);
   if (channel === "email") q = q.eq("do_not_email", false).not("email", "is", null);
   else q = q.eq("do_not_sms", false).not("phone", "is", null);
-  const { data } = await q.limit(5000);
+  const { data } = await q.range(offset, offset + limit - 1);
   return (data as CrmContact[]) ?? [];
 }
 
@@ -56,9 +93,31 @@ export async function enrollContacts(
   return (data ?? []).length;
 }
 
-/** Send a one-shot blast to the whole audience, logging each message. */
-export async function sendBlast(db: DB, campaign: CrmCampaign): Promise<{ sent: number; failed: number }> {
-  const contacts = await resolveAudience(db, campaign.audience, campaign.channel);
+async function persistBlastProgress(
+  db: DB,
+  campaign: CrmCampaign,
+  nextOffset: number,
+  done: boolean
+): Promise<void> {
+  await db
+    .from("crm_campaigns")
+    .update({
+      status: done ? "done" : "sending",
+      audience: { ...campaign.audience, _blast_offset: nextOffset },
+    })
+    .eq("id", campaign.id);
+}
+
+/** Send one blast chunk (BLAST_BATCH_SIZE). Leaves status `sending` until the audience is exhausted. */
+export async function sendBlast(
+  db: DB,
+  campaign: CrmCampaign
+): Promise<{ sent: number; failed: number; done: boolean; offset: number }> {
+  const offset = blastOffset(campaign.audience);
+  const contacts = await resolveAudience(db, campaign.audience, campaign.channel, {
+    offset,
+    limit: BLAST_BATCH_SIZE,
+  });
   let sent = 0;
   let failed = 0;
   for (const c of contacts) {
@@ -75,8 +134,10 @@ export async function sendBlast(db: DB, campaign: CrmCampaign): Promise<{ sent: 
     if (ok) sent++;
     else failed++;
   }
-  await db.from("crm_campaigns").update({ status: "done" }).eq("id", campaign.id);
-  return { sent, failed };
+  const nextOffset = offset + contacts.length;
+  const done = contacts.length < BLAST_BATCH_SIZE;
+  await persistBlastProgress(db, campaign, nextOffset, done);
+  return { sent, failed, done, offset: nextOffset };
 }
 
 /**
@@ -172,21 +233,36 @@ export async function processDrips(db: DB, limit = 200): Promise<{ processed: nu
   return { processed };
 }
 
-/** Cron entrypoint: fire scheduled blasts whose time has come. */
-export async function processScheduledBlasts(db: DB): Promise<{ fired: number }> {
+/** Cron entrypoint: start due scheduled blasts and continue in-progress batches. */
+export async function processScheduledBlasts(db: DB): Promise<{ fired: number; chunks: number }> {
   const now = new Date().toISOString();
-  const { data: campaigns } = await db
+  const { data: due } = await db
     .from("crm_campaigns")
     .select("*")
     .eq("type", "blast")
     .eq("status", "scheduled")
     .lte("scheduled_at", now)
     .limit(20);
+
   let fired = 0;
-  for (const c of (campaigns as CrmCampaign[]) ?? []) {
-    await db.from("crm_campaigns").update({ status: "sending" }).eq("id", c.id);
-    await sendBlast(db, c);
+  for (const c of (due as CrmCampaign[]) ?? []) {
+    const audience = { ...c.audience, _blast_offset: 0 };
+    await db.from("crm_campaigns").update({ status: "sending", audience }).eq("id", c.id);
+    await sendBlast(db, { ...c, audience, status: "sending" });
     fired++;
   }
-  return { fired };
+
+  const { data: sending } = await db
+    .from("crm_campaigns")
+    .select("*")
+    .eq("type", "blast")
+    .eq("status", "sending")
+    .limit(20);
+
+  let chunks = 0;
+  for (const c of (sending as CrmCampaign[]) ?? []) {
+    await sendBlast(db, c);
+    chunks++;
+  }
+  return { fired, chunks };
 }

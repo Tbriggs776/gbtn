@@ -1,7 +1,7 @@
 import "server-only";
 
 // Minimal Resend wrapper over the REST API (no SDK dependency). Returns
-// { ok: true } on success, { ok: false, error } otherwise. If RESEND_API_KEY is
+// { ok: true, id } on success, { ok: false, error } otherwise. If RESEND_API_KEY is
 // not configured we report a clear, non-throwing failure so callers can still
 // persist the underlying record and degrade gracefully.
 
@@ -24,7 +24,7 @@ export const isEmailConfigured = Boolean(RESEND_API_KEY);
 export const BOOK_WAITLIST_SEGMENT_ID =
   "f3e92b20-7277-470f-b8f5-ebc0090f71b6";
 
-type SendResult = { ok: boolean; error?: string };
+type SendResult = { ok: boolean; error?: string; id?: string };
 
 function authHeaders(): HeadersInit {
   return {
@@ -67,7 +67,8 @@ export async function sendEmail({
       const body = await res.text();
       return { ok: false, error: `Resend ${res.status}: ${body.slice(0, 300)}` };
     }
-    return { ok: true };
+    const json = (await res.json()) as { id?: string };
+    return { ok: true, id: json.id };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Send failed." };
   }
