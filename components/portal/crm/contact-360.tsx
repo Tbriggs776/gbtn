@@ -1,16 +1,19 @@
 import { formatDate, formatCurrency } from "@/lib/format";
-import type { CrmContactWithCompany, CrmDeal, CrmEnrollmentWithCampaign } from "@/lib/crm/types";
+import type { CrmCase, CrmContactWithCompany, CrmDeal, CrmEnrollmentWithCampaign } from "@/lib/crm/types";
 
 export function Contact360({
   contact,
   deals,
+  cases,
   lastEnrollment,
 }: {
   contact: CrmContactWithCompany;
   deals: CrmDeal[];
+  cases: CrmCase[];
   lastEnrollment: CrmEnrollmentWithCampaign | null;
 }) {
   const openDeal = deals.find((d) => d.status === "open") ?? null;
+  const openCases = cases.filter((c) => c.status !== "closed");
   const arr = Number(contact.mrr || 0) * 12;
   return (
     <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
@@ -22,6 +25,7 @@ export function Contact360({
         <Stat label="ARR" value={formatCurrency(arr)} />
         <Stat label="First won" value={contact.first_won_at ? formatDate(contact.first_won_at) : "—"} />
         <Stat label="Last won" value={contact.last_won_at ? formatDate(contact.last_won_at) : "—"} />
+        <Stat label="Open cases" value={String(openCases.length)} />
       </dl>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl bg-paper-soft px-3 py-2.5">
@@ -50,6 +54,19 @@ export function Contact360({
           )}
         </div>
       </div>
+      {openCases.length ? (
+        <div className="mt-3 rounded-xl bg-paper-soft px-3 py-2.5">
+          <p className="text-xs font-semibold text-muted">Open cases</p>
+          <ul className="mt-1 flex flex-col gap-1">
+            {openCases.slice(0, 4).map((c) => (
+              <li key={c.id} className="truncate text-sm font-semibold text-ink">
+                {c.title}
+                <span className="ml-2 font-normal text-muted">{c.priority}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
