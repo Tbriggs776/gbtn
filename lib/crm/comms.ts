@@ -192,10 +192,11 @@ export async function sendContactSms(
 }
 
 /**
- * Due CRM task reminders. Email channel still pages the assignee (existing
- * behavior). SMS goes to the related contact via sendContactSms (honors
- * do_not_sms). Email-channel contacts also get sendContactEmail when they
- * have an address and are not opted out. Stamps reminded_at either way.
+ * Due CRM task reminders.
+ * email → assignee only (never the contact).
+ * sms → related contact, honoring do_not_sms.
+ * Stamp reminded_at only after a successful send, or when there is nobody to
+ * notify (so we do not retry forever). A failed provider send is left unstamped.
  */
 export async function processTaskReminders(db: DB, limit = 200): Promise<number> {
   const now = new Date().toISOString();
@@ -213,53 +214,47 @@ export async function processTaskReminders(db: DB, limit = 200): Promise<number>
   for (const t of tasks ?? []) {
     const due = t.due_at ? new Date(t.due_at as string).toLocaleString("en-US") : "no due date";
     const channel = t.remind_channel as string;
+    let outcome: "sent" | "failed" | "skip" = "skip";
 
-    if (channel === "email" && t.assignee) {
-      const { data } = await db.auth.admin.getUserById(t.assignee as string);
-      const email = data?.user?.email ?? null;
-      if (email) {
-        const link = t.contact_id
-          ? `${appBaseUrl()}/portal/crm/contacts/${t.contact_id}`
-          : `${appBaseUrl()}/portal/crm/tasks`;
-        await sendEmail({
-          to: email,
-          subject: `Reminder: ${t.title}`,
-          html: emailLayout({
-            heading: "Task reminder",
-            bodyHtml: `<p><strong>${t.title}</strong></p><p>Due: ${due}</p>`,
-            ctaLabel: "Open in CRM",
-            ctaUrl: link,
-          }),
-        });
+    if (channel === "email") {
+      if (t.assignee) {
+        const { data } = await db.auth.admin.getUserById(t.assignee as string);
+        const email = data?.user?.email ?? null;
+        if (email) {
+          const link = t.contact_id
+            ? `${appBaseUrl()}/portal/crm/contacts/${t.contact_id}`
+            : `${appBaseUrl()}/portal/crm/tasks`;
+          const res = await sendEmail({
+            to: email,
+            subject: `Reminder: ${t.title}`,
+            html: emailLayout({
+              heading: "Task reminder",
+              bodyHtml: `<p><strong>${t.title}</strong></p><p>Due: ${due}</p>`,
+              ctaLabel: "Open in CRM",
+              ctaUrl: link,
+            }),
+          });
+          outcome = res.ok ? "sent" : "failed";
+        }
       }
-    }
-
-    if (t.contact_id) {
+    } else if (channel === "sms" && t.contact_id) {
       const { data: contact } = await db
         .from("crm_contacts")
-        .select("email, phone, do_not_email, do_not_sms")
+        .select("phone, do_not_sms")
         .eq("id", t.contact_id)
         .maybeSingle();
-      if (contact) {
-        const ctx = { contactId: t.contact_id as string };
-        if (channel === "email" && contact.email && !contact.do_not_email) {
-          await sendContactEmail(db, ctx, {
-            to: contact.email as string,
-            subject: `Reminder: ${t.title}`,
-            html: `<p><strong>${t.title}</strong></p><p>Due: ${due}</p>`,
-          });
-        }
-        if (channel === "sms" && contact.phone && !contact.do_not_sms) {
-          await sendContactSms(db, ctx, {
-            to: contact.phone as string,
-            body: `Reminder: ${t.title} (due ${due})`,
-          });
-        }
+      if (contact?.phone && !contact.do_not_sms) {
+        const res = await sendContactSms(db, { contactId: t.contact_id as string }, {
+          to: contact.phone as string,
+          body: `Reminder: ${t.title} (due ${due})`,
+        });
+        outcome = res.ok ? "sent" : "failed";
       }
     }
 
+    if (outcome === "failed") continue;
     await db.from("crm_tasks").update({ reminded_at: now }).eq("id", t.id);
-    sent++;
+    if (outcome === "sent") sent++;
   }
   return sent;
 }
