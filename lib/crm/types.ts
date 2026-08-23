@@ -1,4 +1,5 @@
-// Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql.
+// Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql
+// + 0022_crm_email_marketing.sql.
 // The CRM is GBTN-internal (platform admin only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
@@ -233,6 +234,34 @@ export type CrmCampaignStep = {
   created_at: string;
 };
 
+export type CrmSegment = {
+  id: string;
+  name: string;
+  filter: Record<string, unknown>;
+  created_at: string;
+};
+
+export type CrmTemplate = {
+  id: string;
+  name: string;
+  channel: Channel;
+  subject: string | null;
+  body: string;
+  created_at: string;
+};
+
+export type CampaignStats = {
+  enrolled: number;
+  active: number;
+  completed: number;
+  messages: number;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+};
+
 export type EnrollmentStatus =
   | "active"
   | "completed"
@@ -284,7 +313,7 @@ export type CrmMessage = {
   updated_at: string;
 };
 
-// ── Display helpers ─────────────────────────────────
+// ── Display helpers ─────────────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
 
