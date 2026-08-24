@@ -7,7 +7,9 @@ import { CreateClientForm, InviteUserForm } from "@/components/portal/admin-form
 import { AdminUsers, type AdminUser } from "@/components/portal/admin-users";
 import { AdminAnalytics, type ActivityEvent } from "@/components/portal/admin-analytics";
 import { Integrations } from "@/components/portal/admin/integrations";
+import { GhlConnection, type GhlClientStatus } from "@/components/portal/admin/ghl-connection";
 import { platformIntegrationInfo } from "@/lib/integrations/platform-secrets";
+import { getConnection as getGhlConnection } from "@/lib/ghl/service";
 import { normalizeRole, type ClientRole } from "@/lib/permissions";
 
 export default async function AdminPage() {
@@ -200,6 +202,25 @@ export default async function AdminPage() {
       <>
       <div className="mt-6">
         <Integrations anthropic={await platformIntegrationInfo("anthropic")} />
+      </div>
+
+      <div className="mt-6">
+        <GhlConnection
+          clients={await Promise.all(
+            clients.map(async (c): Promise<GhlClientStatus> => {
+              const conn = await getGhlConnection(c.id);
+              return {
+                clientId: c.id,
+                clientName: c.name,
+                connected: Boolean(conn) && conn?.status !== "disconnected",
+                locationId: conn?.locationId ?? null,
+                hint: conn?.hint ?? null,
+                lastSyncedAt: conn?.lastSyncedAt ?? null,
+                lastSyncError: conn?.lastSyncError ?? null,
+              };
+            })
+          )}
+        />
       </div>
 
       <section className="mt-6 rounded-2xl border border-line bg-white ring-soft">

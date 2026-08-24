@@ -18,6 +18,8 @@ const icons = {
   briefing: "M4 5h16M4 5v14a2 2 0 002 2h12a2 2 0 002-2V5M9 10l2 2 4-4",
   marketing: "M3 3v18h18M7 14l3-3 3 3 5-6",
   googleAds: "M10.5 3.5L3 16.5a3 3 0 005.2 3L15.7 6.5a3 3 0 00-5.2-3zM18 21a3 3 0 100-6 3 3 0 000 6z",
+  conversations:
+    "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
   levers: "M4 8h10M18 8h2M4 16h6M14 16h6M14 6v4M10 14v4",
   pricing: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6",
   ops: "M8 2v3M16 2v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM9 12h2M9 16h2M14 12h2",
@@ -70,6 +72,12 @@ export function PortalNav({
   ];
   // Client-specific tools.
   if (activeClient?.slug === "floor-daddy") {
+    all.push({
+      label: "Conversations",
+      href: "/portal/conversations",
+      icon: "conversations",
+      key: "conversations",
+    });
     all.push({ label: "Ops Reports", href: "/portal/ops-reports", icon: "ops", key: "opsReports" });
     all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
     all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
