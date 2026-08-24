@@ -1,14 +1,23 @@
 # Growth by the Numbers
 
-Marketing site for **Growth by the Numbers (GBTN)** — Tyler Briggs' fractional CFO &
-value-creation practice. Built with Next.js (App Router) + Tailwind CSS v4,
-designed for deployment on Vercel.
+The web platform for **Growth by the Numbers (GBTN)** — Tyler Briggs' fractional
+CFO & value-creation practice. It's three things in one Next.js app:
+
+1. **Marketing site** — the public `growthbythenumbers.com` (home, about, services, results, contact).
+2. **Client portal** — an authenticated, multi-tenant workspace where each client sees
+   their own documents, financials, and dashboards.
+3. **Agency CRM** — GBTN's internal sales + customer engine (contacts, deals, campaigns,
+   a unified inbox), used only by GBTN staff.
+
+Built with Next.js (App Router) + Tailwind CSS v4 + Supabase, deployed on Vercel.
 
 ## Stack
 
-- **Next.js 15** (App Router, React 19, static export of all routes)
+- **Next.js 15** (App Router, React 19) · **TypeScript**
 - **Tailwind CSS v4** (CSS-first config in `app/globals.css`)
-- **TypeScript**
+- **Supabase** — Postgres + Auth + Row Level Security + Storage + Vault (for secrets)
+- **Resend** (email), **Twilio** (SMS/voice), **CallRail** (call logging), **Anthropic** (AI)
+- **Vercel** — hosting + Cron
 
 ## Develop
 
@@ -16,46 +25,79 @@ designed for deployment on Vercel.
 npm install
 npm run dev      # http://localhost:3000
 npm run build    # production build
+npm run lint
 ```
+
+The marketing site runs with zero config. The portal + CRM need Supabase and the other
+integrations wired up — see [SETUP.md](SETUP.md).
+
+## Access model
+
+Three platform roles (`profiles.role`):
+
+| Role | Signs in at | Sees |
+|---|---|---|
+| **client** | `/login` | Only their own company's portal (documents, financials, dashboards) |
+| **employee** | `/team` | The CRM only — no client data, no provisioning/user management |
+| **admin** (GBTN) | `/team` | Everything: every client's portal **and** the full CRM + admin |
+
+The two login doors are strict: the wrong role is signed out and pointed at the correct
+door, and the server-side layout guards enforce it regardless. "Staff" means admin ∪
+employee (SQL helper `is_staff()`); client-data tables stay gated on `is_admin()`, so an
+employee can never reach a client's books.
 
 ## Project structure
 
 ```
 app/
-  layout.tsx        Root layout, nav + footer, global metadata
-  page.tsx          Home
-  about/            About / track record (the trust engine)
-  services/         3-tier service matrix + engagement model
-  results/          Outcome / case-study cards
-  contact/          Contact details + inquiry form
-  sitemap.ts        Generated sitemap
-  robots.ts         robots.txt
-  icon.svg          Favicon
-components/
-  ui.tsx            Primitives (Container, Section, Button, Card, etc.)
-  sections.tsx      Reusable blocks (StatBar, LogoWall, ProcessSteps, CtaBand)
-  site-nav.tsx      Header / mobile nav
-  site-footer.tsx   Footer
-  contact-form.tsx  Inquiry form (currently mailto-based)
+  (marketing)/        Public site — home, about, services, results, contact, metrics
+  login/              Client login door
+  team/               Staff (admin + employee) login door
+  auth/               Supabase email-link handlers (confirm / callback / signout)
+  portal/             Authenticated client portal
+    page.tsx            Overview (employees are redirected to the CRM)
+    documents/ financials/ fpa/ briefing/ ops-reports/ marketing/ ...
+    admin/              Client + user provisioning, staff creation, analytics
+    crm/                ── GBTN-internal CRM (staff only) ──
+      page.tsx            Pipeline dashboard
+      conversations/      Unified SMS inbox (list + thread + reply)
+      contacts/ companies/ deals/ tasks/ cases/ campaigns/
+      settings/           Twilio + CallRail credentials (admin only)
+  api/
+    twilio/             Inbound SMS + status + voice webhooks (signature-verified)
+    resend/webhook/     Email delivery/open/click events
+    cron/               Vercel Cron: crm-engine, callrail-sync, marketing-sync, …
+    unsubscribe/        HMAC-signed one-click email opt-out
+components/             UI primitives + portal/CRM components
 lib/
-  site.ts           ★ Single source of truth for all site copy & data
+  site.ts             ★ Marketing-site copy & data (single source of truth)
+  auth.ts             Session, role gates (requireAdmin / requireStaff / requireCapability)
+  permissions.ts      Capability matrix (client roles: admin/finance/ops/marketing)
+  supabase/           Server, browser, and service-role clients
+  crm/                CRM domain: service, actions, comms, twilio, campaigns, ai, conversations
+  financials/ ops/ marketing/   Portal domains
+  integrations/       Vault-backed platform secrets (Anthropic, Twilio, CallRail)
+supabase/
+  migrations/         Ordered SQL migrations (see SETUP.md — apply all in order)
+  email-templates/    Branded Supabase auth email HTML
 ```
 
-## Editing content
+## Editing marketing content
 
-Almost all copy — services, stats, track record, results, contact details —
-lives in [`lib/site.ts`](lib/site.ts). Edit there and it propagates across pages.
+Almost all public-site copy — services, stats, track record, results, contact details —
+lives in [`lib/site.ts`](lib/site.ts). Edit there; it propagates across pages.
 
-## Open TODOs (search the codebase for `TODO:`)
+## Secrets
 
-- Confirm final **domain** and public **email** (`lib/site.ts`).
-- Add Tyler's **headshot** to `/public` and swap the placeholder in `app/about/page.tsx`.
-- Confirm realized **exit outcomes** (acquirer / value / multiple) for the About page.
-- Add **Calendly** link (`site.founder.calendly`) to enable the booking embed on Contact.
-- Replace the **placeholder testimonial** on the home page with a real, attributed quote.
-- Wire the contact form to a real endpoint (e.g. Formspree) to replace the mailto fallback.
+Two tiers:
+
+- **Environment variables** (Supabase, Resend, `CRON_SECRET`, etc.) — see [SETUP.md](SETUP.md).
+- **Vault-stored platform secrets** — the Anthropic key, Twilio credentials, and CallRail
+  credentials are stored encrypted in Supabase Vault and set through the app UI (Admin →
+  Integrations, and CRM → Settings), never in env or the browser.
 
 ## Deploy
 
-Push to GitHub and import the repo in Vercel (zero-config for Next.js), or run
-`vercel` from the project root.
+Push to `main`; Vercel builds and deploys automatically. Add the environment variables
+from [SETUP.md](SETUP.md) in **Vercel → Project → Settings → Environment Variables**, and
+configure the Cron secret + Twilio webhooks as described there.
