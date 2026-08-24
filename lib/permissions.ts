@@ -81,7 +81,7 @@ export function normalizeRole(v: unknown): ClientRole {
 
 export type NavKey =
   | "overview" | "documents" | "financials" | "fpa" | "briefing" | "marketing" | "googleAds"
-  | "opsReports" | "levers" | "pricing" | "crm" | "settings" | "account" | "admin";
+  | "conversations" | "opsReports" | "levers" | "pricing" | "crm" | "settings" | "account" | "admin";
 
 /** null = always visible to anyone with access to the client. */
 export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
@@ -92,6 +92,10 @@ export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
   briefing: "financials", // CFO Briefing joins the P&L to operations
   marketing: "marketing",
   googleAds: "marketing",
+  // Conversations is lead-handling performance — a marketing/sales question,
+  // and it exposes both customer contact detail and per-rep scorecards. Gated
+  // with Marketing rather than Ops for that second reason as much as the first.
+  conversations: "marketing",
   opsReports: "ops",
   levers: "ops",
   pricing: "ops",

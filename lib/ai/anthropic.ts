@@ -19,18 +19,22 @@ async function client(): Promise<Anthropic | null> {
 }
 
 /**
- * Generate the CFO briefing. Thinking is on by default on opus-5 and counts
- * toward max_tokens, so max_tokens is generous relative to the ~220-word output.
+ * One completion. Thinking is on by default on opus-5 and counts toward
+ * max_tokens, so max_tokens is generous relative to the visible output.
  * No temperature/budget_tokens — both 400 on opus-5.
  */
-export async function generateBriefing(system: string, prompt: string): Promise<AiResult> {
+export async function generate(
+  system: string,
+  prompt: string,
+  maxTokens = 6000
+): Promise<AiResult> {
   const c = await client();
   if (!c) return { ok: false, reason: "no_key", message: "No Anthropic key configured." };
 
   try {
     const msg = await c.messages.create({
       model: BRIEFING_MODEL,
-      max_tokens: 6000,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: prompt }],
     });
@@ -48,7 +52,7 @@ export async function generateBriefing(system: string, prompt: string): Promise<
   } catch (e) {
     // Surface a short message to the admin (bad key, wrong model, rate limit);
     // detail stays server-side.
-    console.error("generateBriefing:", e);
+    console.error("anthropic.generate:", e);
     const message =
       e instanceof Anthropic.AuthenticationError
         ? "The Anthropic key was rejected (401)."
@@ -63,10 +67,12 @@ export async function generateBriefing(system: string, prompt: string): Promise<
   }
 }
 
+/** The CFO briefing. Kept as its own name because that's how callers read. */
+export async function generateBriefing(system: string, prompt: string): Promise<AiResult> {
+  return generate(system, prompt);
+}
+
 /** A trivial call to validate the stored key, for the admin "Test" button. */
 export async function testAnthropicKey(): Promise<AiResult> {
-  return generateBriefing(
-    "Reply with exactly the word: OK",
-    "Say OK."
-  );
+  return generate("Reply with exactly the word: OK", "Say OK.", 64);
 }
