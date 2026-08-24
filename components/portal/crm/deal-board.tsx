@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from "./ui";
 import { createDeal, moveDealStage } from "@/lib/crm/actions";
 import { formatCurrency } from "@/lib/format";
@@ -32,14 +32,19 @@ export function DealBoard({
   const [lostReason, setLostReason] = useState("");
   const [lostError, setLostError] = useState("");
 
+  // Re-sync the board whenever the server prop changes (e.g. after a successful
+  // move's router.refresh, or another edit) so optimistic state never drifts.
+  useEffect(() => setLocalDeals(deals), [deals]);
+
   const byStage = (stageId: string) => localDeals.filter((d) => d.stage_id === stageId);
 
   function applyMove(id: string, stageId: string, lost_reason?: string) {
+    const snapshot = localDeals; // revert target if the move fails
     setLocalDeals((prev) => prev.map((d) => (d.id === id ? { ...d, stage_id: stageId } : d)));
     start(async () => {
       const res = await moveDealStage(id, stageId, lost_reason);
       if (!res.ok) {
-        setLocalDeals(deals);
+        setLocalDeals(snapshot);
         if (lost_reason !== undefined) setLostError(res.error);
       } else {
         setLostMove(null);
@@ -223,6 +228,7 @@ function NewDealModal({
         expected_close: form.expected_close || null,
       });
       if (!res.ok) return setError(res.error);
+      setForm((f) => ({ ...f, title: "", value: "", contact_id: "", company_id: "", expected_close: "" }));
       onClose();
       router.refresh();
     });

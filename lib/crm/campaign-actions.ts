@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/auth";
+import { assertStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getCampaign } from "./service";
 import {
@@ -34,7 +34,7 @@ export async function createCampaign(input: {
   body?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await assertAdmin();
+    const session = await assertStaff();
     const db = await createClient();
     if (!input.name?.trim()) return { ok: false, error: "Campaign name is required." };
     const { data, error } = await db
@@ -60,7 +60,7 @@ export async function createCampaign(input: {
 
 export async function updateCampaign(id: string, patch: Record<string, unknown>): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_campaigns").update(patch).eq("id", id);
     if (error) throw error;
@@ -87,7 +87,7 @@ export async function saveCampaignSteps(
   }[]
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     await db.from("crm_campaign_steps").delete().eq("campaign_id", campaignId);
     if (steps.length > 0) {
@@ -119,7 +119,7 @@ export async function enrollSelected(
   contactIds: string[]
 ): Promise<ActionResult<{ enrolled: number }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const n = await enrollContacts(db, campaignId, contactIds);
     revalidatePath(`${CRM}/campaigns/${campaignId}`);
@@ -134,7 +134,7 @@ export async function enrollAudience(
   audience: Record<string, unknown>
 ): Promise<ActionResult<{ enrolled: number }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const campaign = await getCampaign(db, campaignId);
     if (!campaign) return { ok: false, error: "Campaign not found." };
@@ -156,7 +156,7 @@ export async function sendCampaignNow(
   campaignId: string
 ): Promise<ActionResult<{ sent: number; failed: number; done: boolean }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const campaign = await getCampaign(db, campaignId);
     if (!campaign) return { ok: false, error: "Campaign not found." };
@@ -173,7 +173,7 @@ export async function sendCampaignNow(
 
 export async function scheduleCampaign(campaignId: string, whenIso: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const campaign = await getCampaign(db, campaignId);
     const audience = { ...(campaign?.audience ?? {}), _blast_offset: 0 };
@@ -194,7 +194,7 @@ export async function setCampaignStatus(
   status: "draft" | "active" | "paused" | "archived"
 ): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_campaigns").update({ status }).eq("id", campaignId);
     if (error) throw error;
@@ -211,7 +211,7 @@ export async function saveSegment(input: {
   filter: Record<string, unknown>;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     if (!input.name?.trim()) return { ok: false, error: "Segment name is required." };
     const row = { name: input.name.trim(), filter: audienceFilter(input.filter) };
@@ -232,7 +232,7 @@ export async function saveSegment(input: {
 
 export async function deleteSegment(id: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_segments").delete().eq("id", id);
     if (error) throw error;
@@ -251,7 +251,7 @@ export async function saveTemplate(input: {
   body: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     if (!input.name?.trim()) return { ok: false, error: "Template name is required." };
     const row = {
@@ -277,7 +277,7 @@ export async function saveTemplate(input: {
 
 export async function deleteTemplate(id: string): Promise<ActionResult> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const db = await createClient();
     const { error } = await db.from("crm_templates").delete().eq("id", id);
     if (error) throw error;

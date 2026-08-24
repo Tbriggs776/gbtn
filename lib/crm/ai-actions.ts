@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { assertAdmin } from "@/lib/auth";
+import { assertStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { getContact, getContactTimeline } from "./service";
 import {
@@ -28,7 +28,7 @@ async function ctx(contactId: string) {
 
 export async function aiSummarize(contactId: string): Promise<ActionResult<{ text: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const { contact, timeline } = await ctx(contactId);
     if (!contact) return { ok: false, error: "Contact not found." };
     const res = await summarizeContact(contact, timeline);
@@ -41,7 +41,7 @@ export async function aiSummarize(contactId: string): Promise<ActionResult<{ tex
 
 export async function aiNextAction(contactId: string): Promise<ActionResult<{ text: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const { contact, timeline } = await ctx(contactId);
     if (!contact) return { ok: false, error: "Contact not found." };
     const res = await nextBestAction(contact, timeline);
@@ -58,7 +58,7 @@ export async function aiDraft(
   instruction?: string
 ): Promise<ActionResult<{ text: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const { contact, timeline } = await ctx(contactId);
     if (!contact) return { ok: false, error: "Contact not found." };
     const res = await draftReply(contact, timeline, { channel, instruction });
@@ -71,7 +71,7 @@ export async function aiDraft(
 
 export async function aiScore(contactId: string): Promise<ActionResult<{ score: number; rationale: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const { db, contact, timeline } = await ctx(contactId);
     if (!contact) return { ok: false, error: "Contact not found." };
     const res = await scoreLead(contact, timeline);
@@ -90,7 +90,7 @@ export async function aiDraftCampaign(input: {
   audience?: string;
 }): Promise<ActionResult<{ text: string }>> {
   try {
-    await assertAdmin();
+    await assertStaff();
     const res = await draftCampaign(input);
     if (!res.ok) return { ok: false, error: res.message };
     return { ok: true, data: { text: res.text } };

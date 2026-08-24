@@ -60,14 +60,30 @@ export async function POST(req: Request) {
     // Update the matching call activity meta (best-effort).
     const { data: act } = await db
       .from("crm_activities")
-      .select("id, meta")
+      .select("id, meta, contact_id, occurred_at")
       .eq("type", "call")
       .filter("meta->>sid", "eq", callSid)
       .limit(1)
       .maybeSingle();
     if (act) {
-      const meta = { ...(act.meta as Record<string, unknown>), connected: duration > 0 ? "true" : "false", duration_sec: duration };
+      const connected = duration > 0;
+      const meta = { ...(act.meta as Record<string, unknown>), connected: connected ? "true" : "false", duration_sec: duration };
       await db.from("crm_activities").update({ meta }).eq("id", act.id);
+      // The insert-only auditing trigger can't see this later UPDATE, so a
+      // connected outbound call would never mark the contact as contacted.
+      // Set last_contacted_at here (only advancing it forward).
+      if (connected && act.contact_id) {
+        const { data: c } = await db
+          .from("crm_contacts")
+          .select("last_contacted_at")
+          .eq("id", act.contact_id as string)
+          .maybeSingle();
+        const prev = c?.last_contacted_at as string | null | undefined;
+        const when = (act.occurred_at as string) ?? new Date().toISOString();
+        if (!prev || new Date(prev) < new Date(when)) {
+          await db.from("crm_contacts").update({ last_contacted_at: when }).eq("id", act.contact_id as string);
+        }
+      }
     }
   }
 

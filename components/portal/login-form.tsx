@@ -4,8 +4,15 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type Mode = "password" | "magic" | "reset";
+type Audience = "client" | "staff";
 
-export function LoginForm({ redirectTo }: { redirectTo?: string }) {
+export function LoginForm({
+  redirectTo,
+  audience = "client",
+}: {
+  redirectTo?: string;
+  audience?: Audience;
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<Mode>("password");
@@ -13,7 +20,8 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
   const [sent, setSent] = useState<null | "magic" | "reset">(null);
   const [error, setError] = useState<string | null>(null);
 
-  const next = redirectTo && redirectTo.startsWith("/") ? redirectTo : "/portal";
+  const home = audience === "staff" ? "/portal/crm" : "/portal";
+  const next = redirectTo && redirectTo.startsWith("/") ? redirectTo : home;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,13 +30,45 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
     const supabase = createClient();
 
     if (mode === "password") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setError(
           /invalid login credentials/i.test(error.message)
             ? "Email or password is incorrect."
             : error.message
         );
+        setBusy(false);
+        return;
+      }
+      // Strict doors: verify the account matches this login before proceeding.
+      // Only enforce when we actually know the role — a failed/racey profile
+      // read must NOT sign a valid user out. The server-side layout guards
+      // (requireStaff on the CRM, the /portal employee redirect) are the real
+      // boundary; this is a friendly front-door check.
+      const uid = data.user?.id;
+      let role: string | null = null;
+      let roleKnown = false;
+      if (uid) {
+        const { data: prof, error: pErr } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        if (!pErr && prof) {
+          role = (prof.role as string | undefined) ?? null;
+          roleKnown = true;
+        }
+      }
+      const isStaff = role === "admin" || role === "employee";
+      if (roleKnown && audience === "staff" && !isStaff) {
+        await supabase.auth.signOut();
+        setError("WRONG_DOOR_CLIENT");
+        setBusy(false);
+        return;
+      }
+      if (roleKnown && audience === "client" && isStaff) {
+        await supabase.auth.signOut();
+        setError("WRONG_DOOR_STAFF");
         setBusy(false);
         return;
       }
@@ -137,7 +177,23 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
         </div>
       )}
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error === "WRONG_DOOR_STAFF" ? (
+        <p className="text-sm text-red-600">
+          That&apos;s a GBTN staff account.{" "}
+          <a href="/team" className="font-semibold underline">
+            Use the team login →
+          </a>
+        </p>
+      ) : error === "WRONG_DOOR_CLIENT" ? (
+        <p className="text-sm text-red-600">
+          That account isn&apos;t GBTN staff.{" "}
+          <a href="/login" className="font-semibold underline">
+            Use the client login →
+          </a>
+        </p>
+      ) : error ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : null}
 
       <button
         type="submit"

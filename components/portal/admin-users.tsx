@@ -179,6 +179,7 @@ function UserRow({
                 className={`${field} disabled:opacity-60`}
               >
                 <option value="client">Client</option>
+                <option value="employee">Employee (CRM only)</option>
                 <option value="admin">Admin</option>
               </select>
             </div>

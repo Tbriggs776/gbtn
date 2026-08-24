@@ -358,6 +358,29 @@ export type CrmMessage = {
   updated_at: string;
 };
 
+export type ConversationStatus = "open" | "snoozed" | "closed";
+
+export type CrmConversation = {
+  id: string;
+  contact_id: string;
+  channel: Channel;
+  status: ConversationStatus;
+  assignee: string | null;
+  unread: boolean;
+  last_message_at: string | null;
+  last_inbound_at: string | null;
+  snooze_until: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmConversationJoined = CrmConversation & {
+  contact?: Pick<
+    CrmContact,
+    "id" | "first_name" | "last_name" | "email" | "phone" | "do_not_email" | "do_not_sms"
+  > | null;
+};
+
 // ── Display helpers ─────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
