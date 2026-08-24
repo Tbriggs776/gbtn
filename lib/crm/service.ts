@@ -1,18 +1,24 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  CampaignStats,
   CrmActivity,
   CrmCampaign,
   CrmCampaignStep,
+  CrmCase,
+  CrmCaseJoined,
   CrmCompany,
   CrmContact,
   CrmContactWithCompany,
   CrmDeal,
   CrmDealJoined,
   CrmMessage,
+  CrmSegment,
   CrmStage,
   CrmTask,
   CrmTaskJoined,
+  CrmTemplate,
+  CrmEnrollmentWithCampaign,
   LifecycleStage,
 } from "./types";
 
@@ -206,6 +212,54 @@ export async function getContactDeals(db: DB, contactId: string): Promise<CrmDea
   return (data as CrmDeal[]) ?? [];
 }
 
+// ── Cases ────────────────────────────────────────────────────────────────────
+export async function listCases(
+  db: DB,
+  opts: { status?: string; contactId?: string; limit?: number } = {}
+): Promise<CrmCaseJoined[]> {
+  let q = db
+    .from("crm_cases")
+    .select("*, contact:crm_contacts(id, first_name, last_name)")
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(opts.limit ?? 200);
+  if (opts.status && opts.status !== "all") q = q.eq("status", opts.status);
+  if (opts.contactId) q = q.eq("contact_id", opts.contactId);
+  const { data } = await q;
+  return (data as CrmCaseJoined[]) ?? [];
+}
+
+export async function getCase(db: DB, id: string): Promise<CrmCaseJoined | null> {
+  const { data } = await db
+    .from("crm_cases")
+    .select("*, contact:crm_contacts(id, first_name, last_name)")
+    .eq("id", id)
+    .maybeSingle();
+  return (data as CrmCaseJoined) ?? null;
+}
+
+export async function getContactCases(db: DB, contactId: string): Promise<CrmCase[]> {
+  const { data } = await db
+    .from("crm_cases")
+    .select("*")
+    .eq("contact_id", contactId)
+    .order("opened_at", { ascending: false });
+  return (data as CrmCase[]) ?? [];
+}
+
+export async function getLastEnrollment(
+  db: DB,
+  contactId: string
+): Promise<CrmEnrollmentWithCampaign | null> {
+  const { data } = await db
+    .from("crm_enrollments")
+    .select("*, campaign:crm_campaigns(id, name, status, channel)")
+    .eq("contact_id", contactId)
+    .order("enrolled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as CrmEnrollmentWithCampaign) ?? null;
+}
+
 // ── Campaigns ────────────────────────────────────────────────────────────────
 export async function listCampaigns(db: DB): Promise<CrmCampaign[]> {
   const { data } = await db
@@ -229,22 +283,55 @@ export async function getCampaignSteps(db: DB, campaignId: string): Promise<CrmC
   return (data as CrmCampaignStep[]) ?? [];
 }
 
-export async function getCampaignStats(
-  db: DB,
-  campaignId: string
-): Promise<{ enrolled: number; active: number; completed: number; messages: number }> {
-  const [{ count: enrolled }, { count: active }, { count: completed }, { count: messages }] =
-    await Promise.all([
-      db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId),
-      db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "active"),
-      db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "completed"),
-      db.from("crm_messages").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId),
-    ]);
+export async function listSegments(db: DB): Promise<CrmSegment[]> {
+  const { data } = await db.from("crm_segments").select("*").order("name");
+  return (data as CrmSegment[]) ?? [];
+}
+
+export async function listTemplates(db: DB, channel?: "email" | "sms"): Promise<CrmTemplate[]> {
+  let q = db.from("crm_templates").select("*").order("name");
+  if (channel) q = q.eq("channel", channel);
+  const { data } = await q;
+  return (data as CrmTemplate[]) ?? [];
+}
+
+export async function getCampaignStats(db: DB, campaignId: string): Promise<CampaignStats> {
+  const countOf = (status?: string) => {
+    let q = db.from("crm_messages").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId);
+    if (status) q = q.eq("status", status);
+    return q;
+  };
+  const [
+    { count: enrolled },
+    { count: active },
+    { count: completed },
+    { count: messages },
+    { count: sent },
+    { count: delivered },
+    { count: opened },
+    { count: clicked },
+    { count: bounced },
+  ] = await Promise.all([
+    db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId),
+    db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "active"),
+    db.from("crm_enrollments").select("id", { count: "exact", head: true }).eq("campaign_id", campaignId).eq("status", "completed"),
+    countOf(),
+    countOf("sent"),
+    countOf("delivered"),
+    countOf("opened"),
+    countOf("clicked"),
+    countOf("bounced"),
+  ]);
   return {
     enrolled: enrolled ?? 0,
     active: active ?? 0,
     completed: completed ?? 0,
     messages: messages ?? 0,
+    sent: sent ?? 0,
+    delivered: delivered ?? 0,
+    opened: opened ?? 0,
+    clicked: clicked ?? 0,
+    bounced: bounced ?? 0,
   };
 }
 

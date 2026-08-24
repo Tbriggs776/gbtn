@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Badge, Button, ErrorText, Field, Select, TextArea, TextInput } from "./ui";
+import { Contact360 } from "./contact-360";
 import {
   emailContact,
   smsContact,
@@ -11,6 +12,8 @@ import {
   createTask,
   setTaskStatus,
   updateContact,
+  createCase,
+  closeCase,
 } from "@/lib/crm/actions";
 import { aiSummarize, aiNextAction, aiDraft, aiScore } from "@/lib/crm/ai-actions";
 import {
@@ -18,9 +21,11 @@ import {
   LIFECYCLE_STAGES,
   LIFECYCLE_LABEL,
   type CrmActivity,
+  type CrmCase,
   type CrmContactWithCompany,
   type CrmTask,
   type CrmDeal,
+  type CrmEnrollmentWithCampaign,
 } from "@/lib/crm/types";
 import { formatDate, relativeTime, formatCurrency } from "@/lib/format";
 
@@ -43,21 +48,27 @@ export function ContactWorkspace({
   timeline,
   tasks,
   deals,
+  cases,
+  lastEnrollment,
 }: {
   contact: CrmContactWithCompany;
   timeline: CrmActivity[];
   tasks: CrmTask[];
   deals: CrmDeal[];
+  cases: CrmCase[];
+  lastEnrollment: CrmEnrollmentWithCampaign | null;
 }) {
   return (
     <div className="mt-6 grid gap-5 lg:grid-cols-[1fr_340px]">
       <div className="flex flex-col gap-5">
+        <Contact360 contact={contact} deals={deals} cases={cases} lastEnrollment={lastEnrollment} />
         <Composer contact={contact} />
         <Timeline items={timeline} />
       </div>
       <div className="flex flex-col gap-5">
         <AiPanel contact={contact} />
         <Details contact={contact} />
+        <Cases contactId={contact.id} cases={cases} />
         <Tasks contactId={contact.id} tasks={tasks} />
         <Deals contactId={contact.id} deals={deals} />
       </div>
@@ -65,7 +76,6 @@ export function ContactWorkspace({
   );
 }
 
-// ── Composer ─────────────────────────────────────────────────────────────────
 function Composer({ contact }: { contact: CrmContactWithCompany }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("note");
@@ -233,7 +243,6 @@ function Composer({ contact }: { contact: CrmContactWithCompany }) {
   );
 }
 
-// ── Timeline ─────────────────────────────────────────────────────────────────
 function Timeline({ items }: { items: CrmActivity[] }) {
   if (items.length === 0)
     return (
@@ -290,7 +299,6 @@ function labelForType(t: string): string {
   return map[t] ?? t;
 }
 
-// ── AI panel ─────────────────────────────────────────────────────────────────
 function AiPanel({ contact }: { contact: CrmContactWithCompany }) {
   const router = useRouter();
   const [busy, setBusy] = useState("");
@@ -340,7 +348,6 @@ function AiPanel({ contact }: { contact: CrmContactWithCompany }) {
   );
 }
 
-// ── Details ──────────────────────────────────────────────────────────────────
 function Details({ contact }: { contact: CrmContactWithCompany }) {
   const router = useRouter();
   const [, start] = useTransition();
@@ -371,6 +378,9 @@ function Details({ contact }: { contact: CrmContactWithCompany }) {
           <Row label="Source" value={contact.source} />
           <Row label="Last attempt" value={contact.last_attempt_at ? relativeTime(contact.last_attempt_at) : "—"} />
           <Row label="Last connected" value={contact.last_contacted_at ? relativeTime(contact.last_contacted_at) : "—"} />
+          <Row label="Lifetime value" value={formatCurrency(Number(contact.lifetime_value || 0))} />
+          <Row label="MRR" value={formatCurrency(Number(contact.mrr || 0))} />
+          <Row label="Won deals" value={String(contact.won_deal_count ?? 0)} />
         </dl>
         <div className="flex flex-col gap-2 border-t border-line pt-3">
           <label className="flex items-center justify-between text-sm text-muted">
@@ -404,7 +414,58 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-// ── Tasks ────────────────────────────────────────────────────────────────────
+function Cases({ contactId, cases }: { contactId: string; cases: CrmCase[] }) {
+  const router = useRouter();
+  const [, start] = useTransition();
+  const [title, setTitle] = useState("");
+
+  function add() {
+    if (!title.trim()) return;
+    start(async () => {
+      await createCase({ title, contact_id: contactId });
+      setTitle("");
+      router.refresh();
+    });
+  }
+  function close(id: string) {
+    start(async () => {
+      await closeCase(id);
+      router.refresh();
+    });
+  }
+
+  const open = cases.filter((c) => c.status !== "closed");
+  return (
+    <div className="rounded-2xl border border-line bg-white p-5 ring-soft">
+      <h2 className="text-sm font-bold text-ink">Cases</h2>
+      <div className="mt-3 flex flex-col gap-2">
+        {open.length === 0 ? <p className="text-sm text-muted-soft">No open cases.</p> : null}
+        {open.map((c) => (
+          <div key={c.id} className="flex items-start justify-between gap-2 text-sm">
+            <span>
+              <span className="text-ink">{c.title}</span>
+              {c.due_at ? (
+                <span className={`ml-2 text-xs ${new Date(c.due_at) < new Date() ? "text-brand-700" : "text-muted-soft"}`}>
+                  {relativeTime(c.due_at)}
+                </span>
+              ) : null}
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => close(c.id)}>
+              Close
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex gap-2 border-t border-line pt-3">
+        <TextInput placeholder="New case…" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <Button size="sm" onClick={add} disabled={!title.trim()}>
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Tasks({ contactId, tasks }: { contactId: string; tasks: CrmTask[] }) {
   const router = useRouter();
   const [, start] = useTransition();
@@ -460,7 +521,6 @@ function Tasks({ contactId, tasks }: { contactId: string; tasks: CrmTask[] }) {
   );
 }
 
-// ── Deals ────────────────────────────────────────────────────────────────────
 function Deals({ contactId, deals }: { contactId: string; deals: CrmDeal[] }) {
   return (
     <div className="rounded-2xl border border-line bg-white p-5 ring-soft">

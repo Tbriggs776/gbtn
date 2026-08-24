@@ -9,6 +9,7 @@ const TABS = [
   { label: "Companies", href: "/portal/crm/companies", adminOnly: false },
   { label: "Deals", href: "/portal/crm/deals", adminOnly: false },
   { label: "Tasks", href: "/portal/crm/tasks", adminOnly: false },
+  { label: "Cases", href: "/portal/crm/cases", adminOnly: false },
   { label: "Campaigns", href: "/portal/crm/campaigns", adminOnly: false },
   // Integration credentials (Twilio/CallRail) are admin-only.
   { label: "Settings", href: "/portal/crm/settings", adminOnly: true },

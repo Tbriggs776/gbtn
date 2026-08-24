@@ -4,9 +4,9 @@ import { ContactForm } from "@/components/contact-form";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Contact",
+  title: "Book a consultation",
   description:
-    "Book a consultation with Tyler Briggs. A 30-minute conversation about your numbers, your goals, and whether Growth by the Numbers is the right fit.",
+    "Request a 30-minute consultation with Tyler Briggs about your numbers, your goals, and whether Growth by the Numbers is the right fit.",
 };
 
 const contactItems = [
@@ -29,14 +29,15 @@ export default function ContactPage() {
         <div className="glow absolute inset-x-0 -top-24 h-72" />
         <Container className="relative py-20 sm:py-24">
           <div className="mx-auto max-w-2xl text-center">
-            <Eyebrow>Contact</Eyebrow>
+            <Eyebrow>Consultation</Eyebrow>
             <h1 className="mt-5 text-balance text-4xl font-bold tracking-tight text-white sm:text-5xl">
-              Let&apos;s talk numbers.
+              Book a 30-minute consult.
             </h1>
             <p className="mx-auto mt-5 max-w-xl text-lg leading-relaxed text-white/70">
-              Tell me where you are and where you&apos;re trying to go. If
-              there&apos;s a fit, we&apos;ll set up a 30-minute call. If there
-              isn&apos;t, I&apos;ll point you in a better direction.
+              Tell me the decision in front of you and what you want out of the
+              call. If there&apos;s a fit, we&apos;ll set a time. If there
+              isn&apos;t, I&apos;ll point you in a better direction. This is not
+              the book waitlist.
             </p>
           </div>
         </Container>
@@ -45,7 +46,6 @@ export default function ContactPage() {
       <section className="py-16 sm:py-24">
         <Container>
           <div className="grid gap-12 lg:grid-cols-[1fr_1.3fr] lg:gap-16">
-            {/* Contact details */}
             <div>
               <h2 className="text-xl font-bold tracking-tight text-ink">
                 Reach me directly
@@ -82,18 +82,21 @@ export default function ContactPage() {
                 ))}
               </dl>
 
-              {/* Calendly placeholder */}
               <div className="mt-10 rounded-2xl border border-dashed border-line bg-paper-soft p-5">
                 <p className="text-sm text-muted">
-                  {/* TODO: drop your Calendly/scheduling link into lib/site.ts
-                      (founder.calendly) and we'll embed a "Pick a time" button here. */}
                   Prefer to self-schedule? A booking link can live right here.
                 </p>
               </div>
             </div>
 
-            {/* Form */}
             <div className="rounded-3xl border border-line bg-white p-7 ring-card sm:p-9">
+              <h2 className="mb-1 text-lg font-bold tracking-tight text-ink">
+                Request a consultation
+              </h2>
+              <p className="mb-6 text-sm text-muted">
+                Company and revenue stage help me prep. The message is what we
+                actually talk about on the call.
+              </p>
               <ContactForm />
             </div>
           </div>

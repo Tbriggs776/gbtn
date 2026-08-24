@@ -20,6 +20,7 @@ export default async function CrmSettings() {
     { label: "Inbound SMS", url: `${base}/api/twilio/sms` },
     { label: "SMS/Call status callback", url: `${base}/api/twilio/status` },
     { label: "Inbound voice", url: `${base}/api/twilio/voice` },
+    { label: "Resend email events", url: `${base}/api/resend/webhook` },
     { label: "Unsubscribe", url: `${base}/api/unsubscribe?c=<contactId>` },
   ];
 
@@ -48,9 +49,10 @@ export default async function CrmSettings() {
         </div>
 
         <div className="rounded-2xl border border-line bg-white p-6 ring-soft">
-          <h2 className="text-base font-bold text-ink">Twilio webhook URLs</h2>
+          <h2 className="text-base font-bold text-ink">Webhook URLs</h2>
           <p className="mt-1 mb-3 text-sm text-muted">
-            Point your Twilio number&apos;s Messaging &amp; Voice webhooks (and status callbacks) here.
+            Point Twilio Messaging &amp; Voice webhooks here. In Resend, add the email-events endpoint and set
+            RESEND_WEBHOOK_SECRET in Vercel.
           </p>
           <ul className="flex flex-col gap-2">
             {webhooks.map((w) => (

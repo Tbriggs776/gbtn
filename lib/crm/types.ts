@@ -1,4 +1,5 @@
-// Shared CRM types, mirroring supabase/migrations/0020_crm.sql.
+// Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql
+// + 0022_crm_email_marketing.sql + 0023_crm_journeys.sql + 0024_crm_cases.sql.
 // The CRM is GBTN-internal (platform admin only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
@@ -67,6 +68,13 @@ export type CrmContact = {
   last_contacted_at: string | null;
   last_inbound_at: string | null;
   next_follow_up_at: string | null;
+  /** Sum of one_time won deal values. Recurring revenue is in mrr, not here. */
+  lifetime_value: number;
+  /** Monthly recurring: monthly deals + annual/12. ARR = mrr * 12. */
+  mrr: number;
+  won_deal_count: number;
+  first_won_at: string | null;
+  last_won_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -180,6 +188,38 @@ export type CrmTaskJoined = CrmTask & {
   contact?: Pick<CrmContact, "id" | "first_name" | "last_name"> | null;
 };
 
+export const CASE_STATUSES = ["open", "pending", "closed"] as const;
+export type CaseStatus = (typeof CASE_STATUSES)[number];
+
+export const CASE_PRIORITIES = ["low", "normal", "high"] as const;
+export type CasePriority = (typeof CASE_PRIORITIES)[number];
+
+export type CrmCase = {
+  id: string;
+  contact_id: string;
+  company_id: string | null;
+  deal_id: string | null;
+  title: string;
+  status: CaseStatus;
+  priority: CasePriority;
+  assignee: string | null;
+  opened_at: string;
+  due_at: string | null;
+  closed_at: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CrmCaseJoined = CrmCase & {
+  contact?: Pick<CrmContact, "id" | "first_name" | "last_name"> | null;
+};
+
+/** Open follow-up created when a deal moves to a non-terminal stage. */
+export const STAGE_NEXT_STEP_PREFIX = "Next step:";
+export const STAGE_NEXT_STEP_NOTE = "stage_next_step";
+
 export type Channel = "email" | "sms";
 export const CAMPAIGN_TYPES = ["blast", "drip"] as const;
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
@@ -211,6 +251,12 @@ export type CrmCampaign = {
   updated_at: string;
 };
 
+export const STEP_KINDS = ["send", "wait_event", "exit"] as const;
+export type StepKind = (typeof STEP_KINDS)[number];
+
+export const WAIT_EVENTS = ["opened", "clicked", "replied", "stage_changed"] as const;
+export type WaitEvent = (typeof WAIT_EVENTS)[number];
+
 export type CrmCampaignStep = {
   id: string;
   campaign_id: string;
@@ -219,7 +265,40 @@ export type CrmCampaignStep = {
   channel: Channel;
   subject: string | null;
   body: string;
+  kind: StepKind;
+  wait_event: WaitEvent | null;
+  wait_hours: number | null;
+  next_yes: number | null;
+  next_no: number | null;
   created_at: string;
+};
+
+export type CrmSegment = {
+  id: string;
+  name: string;
+  filter: Record<string, unknown>;
+  created_at: string;
+};
+
+export type CrmTemplate = {
+  id: string;
+  name: string;
+  channel: Channel;
+  subject: string | null;
+  body: string;
+  created_at: string;
+};
+
+export type CampaignStats = {
+  enrolled: number;
+  active: number;
+  completed: number;
+  messages: number;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
 };
 
 export type EnrollmentStatus =
@@ -228,6 +307,11 @@ export type EnrollmentStatus =
   | "unsubscribed"
   | "failed"
   | "cancelled";
+
+export type EnrollmentContext = {
+  enrolled_stage?: string | null;
+  wait_until?: string;
+};
 
 export type CrmEnrollment = {
   id: string;
@@ -238,6 +322,11 @@ export type CrmEnrollment = {
   next_run_at: string | null;
   enrolled_at: string;
   completed_at: string | null;
+  context: EnrollmentContext;
+};
+
+export type CrmEnrollmentWithCampaign = CrmEnrollment & {
+  campaign?: Pick<CrmCampaign, "id" | "name" | "status" | "channel"> | null;
 };
 
 export type MessageStatus =
@@ -269,7 +358,7 @@ export type CrmMessage = {
   updated_at: string;
 };
 
-// ── Display helpers ──────────────────────────────────────────────────────────
+// ── Display helpers ─────────────────────
 
 type NameParts = Pick<CrmContact, "first_name" | "last_name"> & { email?: string | null };
 
