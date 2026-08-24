@@ -84,10 +84,13 @@ export async function getContact(
 
 /** Find a contact by email or phone — used to thread inbound comms. */
 export async function findContactByEmail(db: DB, email: string): Promise<CrmContact | null> {
+  // Emails are stored lowercased; use eq (not ilike) so an address containing
+  // `_` or `%` isn't treated as a LIKE wildcard (which could match the wrong
+  // contact or make .maybeSingle() throw on multiple matches).
   const { data } = await db
     .from("crm_contacts")
     .select("*")
-    .ilike("email", email)
+    .eq("email", email.trim().toLowerCase())
     .maybeSingle();
   return (data as CrmContact) ?? null;
 }

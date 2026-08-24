@@ -41,20 +41,32 @@ export function LoginForm({
         return;
       }
       // Strict doors: verify the account matches this login before proceeding.
+      // Only enforce when we actually know the role — a failed/racey profile
+      // read must NOT sign a valid user out. The server-side layout guards
+      // (requireStaff on the CRM, the /portal employee redirect) are the real
+      // boundary; this is a friendly front-door check.
       const uid = data.user?.id;
       let role: string | null = null;
+      let roleKnown = false;
       if (uid) {
-        const { data: prof } = await supabase.from("profiles").select("role").eq("id", uid).single();
-        role = (prof?.role as string | undefined) ?? null;
+        const { data: prof, error: pErr } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", uid)
+          .maybeSingle();
+        if (!pErr && prof) {
+          role = (prof.role as string | undefined) ?? null;
+          roleKnown = true;
+        }
       }
       const isStaff = role === "admin" || role === "employee";
-      if (audience === "staff" && !isStaff) {
+      if (roleKnown && audience === "staff" && !isStaff) {
         await supabase.auth.signOut();
         setError("WRONG_DOOR_CLIENT");
         setBusy(false);
         return;
       }
-      if (audience === "client" && isStaff) {
+      if (roleKnown && audience === "client" && isStaff) {
         await supabase.auth.signOut();
         setError("WRONG_DOOR_STAFF");
         setBusy(false);
