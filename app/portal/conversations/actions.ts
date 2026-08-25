@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { assertCapability, getSession } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncClient, startOfYear } from "@/lib/ghl/sync";
+import { syncClient, windowStart } from "@/lib/ghl/sync";
 import { listConversations } from "@/lib/ghl/service";
 import {
   generateRepCoaching,
@@ -20,7 +20,7 @@ import {
 
 export type ActionState = { ok?: boolean; message?: string; error?: string };
 
-/** Pull GHL into our tables. Defaults to year-to-date. */
+/** Pull GHL into our tables. Defaults to the last 90 days. */
 export async function syncAction(
   _prev: ActionState,
   formData: FormData
@@ -35,7 +35,7 @@ export async function syncAction(
   }
 
   const sinceRaw = String(formData.get("since") ?? "");
-  const since = sinceRaw ? new Date(sinceRaw) : startOfYear();
+  const since = sinceRaw ? new Date(sinceRaw) : windowStart();
   if (Number.isNaN(since.getTime())) return { error: "That start date isn't valid." };
 
   try {
@@ -69,7 +69,7 @@ async function coachingInput(
     .eq("id", clientId)
     .maybeSingle();
 
-  const from = startOfYear();
+  const from = windowStart();
   const to = new Date();
   const rows = await listConversations(clientId, from.toISOString(), to.toISOString());
 

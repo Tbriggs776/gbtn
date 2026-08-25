@@ -4,7 +4,7 @@ import { ConversationsShell as Shell } from "@/components/portal/ghl/shell";
 import { Coaching } from "@/components/portal/ghl/coaching";
 import { NoConversationsState, NotConnectedState } from "@/components/portal/ghl/empty";
 import { getConnection, latestNotes, listConversations } from "@/lib/ghl/service";
-import { startOfYear } from "@/lib/ghl/sync";
+import { windowStart } from "@/lib/ghl/sync";
 import { byRep, summarize } from "@/lib/ghl/metrics";
 import { MIN_LEADS_FOR_REP_COACHING } from "@/lib/ghl/coaching";
 import { dateStamp } from "@/lib/ghl/format";
@@ -42,7 +42,7 @@ export default async function CoachingPage({
     );
   }
 
-  const from = startOfYear();
+  const from = windowStart();
   const to = new Date();
   const [rows, notes] = await Promise.all([
     listConversations(activeClient.id, from.toISOString(), to.toISOString()),
@@ -50,7 +50,7 @@ export default async function CoachingPage({
   ]);
 
   const summary = summarize(rows);
-  const subtitle = `${summary.leads.toLocaleString()} leads year to date${
+  const subtitle = `${summary.leads.toLocaleString()} leads in the last 90 days${
     connection.lastSyncedAt ? ` · synced ${dateStamp(connection.lastSyncedAt)}` : ""
   }`;
 
