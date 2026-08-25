@@ -156,11 +156,11 @@ export async function exportMessages(
         {
           locationId: ctx.locationId,
           channel,
-          // GHL's conversation date filters are Unix time in MILLISECONDS (see
-          // /conversations/search in the API docs, e.g. 1640995200000). ISO
-          // strings are silently ignored — which left the query unbounded.
-          startDate: String(since.getTime()),
-          endDate: String(until.getTime()),
+          // The export requires ISO 8601 dates (unlike /conversations/search,
+          // which wants Unix ms — the two endpoints disagree). Sending ms here
+          // returns a 400 CONVERSATIONS_MSG_INVALID_START_DATE_FORMAT.
+          startDate: since.toISOString(),
+          endDate: until.toISOString(),
           limit: PAGE,
           sortBy: "createdAt",
           // Newest-first. The export caps its total result set, so ascending
