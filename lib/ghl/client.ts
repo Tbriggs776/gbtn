@@ -156,11 +156,17 @@ export async function exportMessages(
         {
           locationId: ctx.locationId,
           channel,
-          startDate: since.toISOString(),
-          endDate: until.toISOString(),
+          // GHL's conversation date filters are Unix time in MILLISECONDS (see
+          // /conversations/search in the API docs, e.g. 1640995200000). ISO
+          // strings are silently ignored — which left the query unbounded.
+          startDate: String(since.getTime()),
+          endDate: String(until.getTime()),
           limit: PAGE,
           sortBy: "createdAt",
-          sortOrder: "asc",
+          // Newest-first. The export caps its total result set, so ascending
+          // order returns the OLDEST messages and truncates before reaching the
+          // recent ones. Walk from the newest and stop once we cross `since`.
+          sortOrder: "desc",
           cursor,
         },
         V_CONVERSATIONS
@@ -176,6 +182,13 @@ export async function exportMessages(
         out.push(m);
       }
       onPage?.(batch.length);
+
+      // Descending walk: the last item of each page is its oldest. Once that
+      // predates the window, everything further back is older too — stop this
+      // pass. This bounds the pull even if the server ignores the date filter.
+      const oldest = batch[batch.length - 1] as { dateAdded?: string } | undefined;
+      const oldestMs = oldest?.dateAdded ? Date.parse(oldest.dateAdded) : NaN;
+      if (Number.isFinite(oldestMs) && oldestMs < since.getTime()) break;
 
       // nextCursor is documented as null when the walk is done. Guard against a
       // server that repeats the cursor instead — that would loop forever.
