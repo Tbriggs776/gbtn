@@ -333,7 +333,7 @@ export async function latestActivity(clientId: string): Promise<Date | null> {
  * ahead of the account's activity (nothing to show otherwise). Falls back to a
  * now-anchored window when there's no data yet.
  */
-export const REPORT_WINDOW_DAYS = 90;
+export const REPORT_WINDOW_DAYS = 30;
 
 export async function reportWindow(clientId: string): Promise<{ from: Date; to: Date }> {
   const latest = await latestActivity(clientId);

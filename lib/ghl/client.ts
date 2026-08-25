@@ -25,6 +25,14 @@ const PAGE = 100;
 /** Stop conditions, so a pathological account can never spin forever. */
 const MAX_PAGES = 500;
 
+// Day-chunked export tuning (see exportMessages).
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Never split a slice below this — an hour is finer than any real burst. */
+const MIN_SLICE_MS = 60 * 60 * 1000;
+/** The export tops out near a few hundred messages per query; a slice that
+ *  returns at least this many was probably truncated, so split and re-fetch. */
+const SLICE_SPLIT_THRESHOLD = 300;
+
 export class GhlError extends Error {
   constructor(
     message: string,
@@ -137,65 +145,79 @@ export async function exportMessages(
   onPage?: (n: number) => void
 ): Promise<GhlMessageApi[]> {
   const out: GhlMessageApi[] = [];
-  // The unfiltered pass and the Email pass are documented as disjoint, but
-  // de-duplicating by id costs one Set and removes any dependence on that
-  // promise holding.
+  // De-dup by id: the two passes (all-non-email + Email) are disjoint, and the
+  // adaptive splitting below can re-request an overlapping range.
   const seen = new Set<string>();
 
-  for (const channel of EXPORT_PASSES) {
-    let cursor: string | undefined;
-
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const data = await get<{
-        messages?: GhlMessageApi[];
-        nextCursor?: string | null;
-        total?: number;
-      }>(
-        ctx,
-        "/conversations/messages/export",
-        {
-          locationId: ctx.locationId,
-          channel,
-          // The export requires ISO 8601 dates (unlike /conversations/search,
-          // which wants Unix ms — the two endpoints disagree). Sending ms here
-          // returns a 400 CONVERSATIONS_MSG_INVALID_START_DATE_FORMAT.
-          startDate: since.toISOString(),
-          endDate: until.toISOString(),
-          limit: PAGE,
-          sortBy: "createdAt",
-          // Newest-first. The export caps its total result set, so ascending
-          // order returns the OLDEST messages and truncates before reaching the
-          // recent ones. Walk from the newest and stop once we cross `since`.
-          sortOrder: "desc",
-          cursor,
-        },
-        V_CONVERSATIONS
-      );
-
-      const batch = data.messages ?? [];
-      for (const m of batch) {
-        const id = typeof m.id === "string" ? m.id : null;
-        if (id) {
-          if (seen.has(id)) continue;
-          seen.add(id);
+  // Fetch one [start, end) slice completely — every channel pass, all pages via
+  // the cursor. Returns how many NEW messages it added.
+  async function fetchSlice(start: Date, end: Date): Promise<number> {
+    let added = 0;
+    for (const channel of EXPORT_PASSES) {
+      let cursor: string | undefined;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const data = await get<{
+          messages?: GhlMessageApi[];
+          nextCursor?: string | null;
+          total?: number;
+        }>(
+          ctx,
+          "/conversations/messages/export",
+          {
+            locationId: ctx.locationId,
+            channel,
+            // The export requires ISO 8601 (unlike /conversations/search, which
+            // wants Unix ms — the two endpoints disagree). Ms → 400.
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+            limit: PAGE,
+            sortBy: "createdAt",
+            sortOrder: "desc",
+            cursor,
+          },
+          V_CONVERSATIONS
+        );
+        const batch = data.messages ?? [];
+        for (const m of batch) {
+          const id = typeof m.id === "string" ? m.id : null;
+          if (id) {
+            if (seen.has(id)) continue;
+            seen.add(id);
+          }
+          out.push(m);
+          added++;
         }
-        out.push(m);
+        onPage?.(batch.length);
+        const next = data.nextCursor ?? undefined;
+        if (!next || next === cursor || batch.length === 0) break;
+        cursor = next;
       }
-      onPage?.(batch.length);
-
-      // Descending walk: the last item of each page is its oldest. Once that
-      // predates the window, everything further back is older too — stop this
-      // pass. This bounds the pull even if the server ignores the date filter.
-      const oldest = batch[batch.length - 1] as { dateAdded?: string } | undefined;
-      const oldestMs = oldest?.dateAdded ? Date.parse(oldest.dateAdded) : NaN;
-      if (Number.isFinite(oldestMs) && oldestMs < since.getTime()) break;
-
-      // nextCursor is documented as null when the walk is done. Guard against a
-      // server that repeats the cursor instead — that would loop forever.
-      const next = data.nextCursor ?? undefined;
-      if (!next || next === cursor || batch.length === 0) break;
-      cursor = next;
     }
+    return added;
+  }
+
+  // The export returns a bounded slice per query (~a few hundred messages) and
+  // then ends the cursor, so a wide range silently drops everything past the
+  // cap. Walk the window in day-sized slices, newest-first, and if a slice
+  // comes back at the cap (so it was probably truncated) split it in half and
+  // recurse — down to a 1-hour floor. Newest-first means a partial run (rate
+  // limits / timeout) still leaves the most recent days complete.
+  async function walk(start: Date, end: Date): Promise<void> {
+    const added = await fetchSlice(start, end);
+    const span = end.getTime() - start.getTime();
+    if (added >= SLICE_SPLIT_THRESHOLD && span > MIN_SLICE_MS) {
+      const mid = new Date(start.getTime() + Math.floor(span / 2));
+      await walk(mid, end);
+      await walk(start, mid);
+    }
+  }
+
+  const floor = since.getTime();
+  let end = until.getTime();
+  while (end > floor) {
+    const start = Math.max(floor, end - DAY_MS);
+    await walk(new Date(start), new Date(end));
+    end = start;
   }
 
   return out;

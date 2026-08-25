@@ -14,7 +14,7 @@ import { generateTeamCoaching } from "./coaching";
 // yesterday.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const NINETY_DAYS_MS = 90 * DAY_MS;
+const SYNC_LOOKBACK_MS = 2 * DAY_MS;
 
 export type DailyReviewResult = {
   clientId: string;
@@ -43,11 +43,10 @@ export async function runDailyReviews(): Promise<{
 
   for (const clientId of clientIds) {
     try {
-      // 1. Refresh: pull the last 90 days of activity so the review sees the
-      //    most recent day. Anchored to the data, then bounded by now.
-      const latestBefore = await latestActivity(clientId);
-      const syncSince = new Date((latestBefore?.getTime() ?? Date.now()) - NINETY_DAYS_MS);
-      await syncClient(clientId, { since: syncSince });
+      // 1. Refresh just the last couple of days so the review sees the newest
+      //    activity (and any backdated messages). The nightly ghl-sync cron
+      //    maintains the full 30-day window; this only needs recency.
+      await syncClient(clientId, { since: new Date(Date.now() - SYNC_LOOKBACK_MS) });
 
       // 2. The prior-day window, anchored to the latest activity we now hold.
       const latest = (await latestActivity(clientId)) ?? new Date();

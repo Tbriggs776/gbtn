@@ -21,7 +21,7 @@ import type { GhlConversationApi, GhlMessageApi, Message, SyncResult, Thread } f
 const WRITE_BATCH = 200;
 
 /** Number of days in the default reporting/sync window. */
-export const WINDOW_DAYS = 90;
+export const WINDOW_DAYS = 30;
 
 /** Start of the rolling reporting window (last WINDOW_DAYS), in UTC. A full-year
  * backfill was too heavy to pull on demand; 90 days covers current performance. */
@@ -157,7 +157,7 @@ export async function syncAllClients(): Promise<{
   failed: number;
   results: { clientId: string; ok: boolean; detail: string }[];
 }> {
-  const NIGHTLY_DAYS = 14;
+  const NIGHTLY_DAYS = 30;
   const since = new Date(Date.now() - NIGHTLY_DAYS * 86_400_000);
 
   const clientIds = await listConnectedClientIds();
