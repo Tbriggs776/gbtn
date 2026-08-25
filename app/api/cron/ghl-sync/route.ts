@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 // A rolling 14-day window across a handful of clients — comfortably inside 60s
 // for normal volumes. The first YEAR-to-date backfill is run by hand from the
 // Conversations tab, precisely because it wouldn't fit here.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function GET(req: Request) {
   // Fail CLOSED: treating a missing secret as "no auth required" would let
