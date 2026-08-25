@@ -5,7 +5,7 @@ import { Threads } from "@/components/portal/ghl/threads";
 import { Transcript } from "@/components/portal/ghl/transcript";
 import { NoConversationsState, NotConnectedState } from "@/components/portal/ghl/empty";
 import { getConnection, getThread, listConversations } from "@/lib/ghl/service";
-import { windowStart } from "@/lib/ghl/sync";
+import { reportWindow } from "@/lib/ghl/service";
 import { summarize } from "@/lib/ghl/metrics";
 import { dateStamp } from "@/lib/ghl/format";
 
@@ -42,8 +42,7 @@ export default async function ThreadsPage({
     );
   }
 
-  const from = windowStart();
-  const to = new Date();
+  const { from, to } = await reportWindow(activeClient.id);
   const rows = await listConversations(activeClient.id, from.toISOString(), to.toISOString());
 
   // getThread is scoped to the client, so a guessed id from another tenant

@@ -4,7 +4,7 @@ import { ConversationsShell as Shell } from "@/components/portal/ghl/shell";
 import { Coaching } from "@/components/portal/ghl/coaching";
 import { NoConversationsState, NotConnectedState } from "@/components/portal/ghl/empty";
 import { getConnection, latestNotes, listConversations } from "@/lib/ghl/service";
-import { windowStart } from "@/lib/ghl/sync";
+import { reportWindow } from "@/lib/ghl/service";
 import { byRep, summarize } from "@/lib/ghl/metrics";
 import { MIN_LEADS_FOR_REP_COACHING } from "@/lib/ghl/coaching";
 import { dateStamp } from "@/lib/ghl/format";
@@ -42,8 +42,7 @@ export default async function CoachingPage({
     );
   }
 
-  const from = windowStart();
-  const to = new Date();
+  const { from, to } = await reportWindow(activeClient.id);
   const [rows, notes] = await Promise.all([
     listConversations(activeClient.id, from.toISOString(), to.toISOString()),
     latestNotes(activeClient.id),
