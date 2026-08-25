@@ -281,12 +281,18 @@ export async function recomputeAggregates(
     };
   });
 
-  // Conflict on the primary key: every id here came back from pass 1, so each
-  // of these is an UPDATE of the aggregate columns and touches nothing else.
-  for (let i = 0; i < updates.length; i += CHUNK) {
+  // Every id here came back from pass 1, so each is strictly an UPDATE of the
+  // aggregate columns. It must NOT be an upsert: upsert builds an INSERT tuple,
+  // and Postgres validates that tuple's constraints before the ON CONFLICT
+  // redirect — with ghl_id omitted (NOT NULL, no default) the insert path trips
+  // the not-null constraint even though the row would only ever update. Update
+  // in place instead (id is the primary key).
+  for (const u of updates) {
+    const { id, ...fields } = u;
     const { error } = await admin
       .from("ghl_conversations")
-      .upsert(updates.slice(i, i + CHUNK), { onConflict: "id" });
+      .update(fields)
+      .eq("id", id);
     if (error) throw new Error(`ghl_conversations aggregates: ${error.message}`);
   }
 }
