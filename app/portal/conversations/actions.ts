@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { assertCapability, getSession } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { syncClient, windowStart } from "@/lib/ghl/sync";
-import { listConversations } from "@/lib/ghl/service";
+import { syncClient } from "@/lib/ghl/sync";
+import { listConversations, reportWindow } from "@/lib/ghl/service";
 import {
   generateRepCoaching,
   generateTeamCoaching,
@@ -35,7 +35,7 @@ export async function syncAction(
   }
 
   const sinceRaw = String(formData.get("since") ?? "");
-  const since = sinceRaw ? new Date(sinceRaw) : windowStart();
+  const since = sinceRaw ? new Date(sinceRaw) : (await reportWindow(clientId)).from;
   if (Number.isNaN(since.getTime())) return { error: "That start date isn't valid." };
 
   try {
@@ -69,8 +69,7 @@ async function coachingInput(
     .eq("id", clientId)
     .maybeSingle();
 
-  const from = windowStart();
-  const to = new Date();
+  const { from, to } = await reportWindow(clientId);
   const rows = await listConversations(clientId, from.toISOString(), to.toISOString());
 
   return {

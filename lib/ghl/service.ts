@@ -311,6 +311,37 @@ const STUB_BASE = {
 
 // ── Reading ──────────────────────────────────────────────────────────────────
 
+/** The most recent conversation activity we hold for a client, or null. */
+export async function latestActivity(clientId: string): Promise<Date | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("ghl_conversations")
+    .select("last_message_at")
+    .eq("client_id", clientId)
+    .not("last_message_at", "is", null)
+    .order("last_message_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const v = data?.last_message_at as string | null | undefined;
+  return v ? new Date(v) : null;
+}
+
+/**
+ * The reporting window: the WINDOW_DAYS ending at the latest activity we hold,
+ * not at wall-clock now. Anchoring to the data means the report always shows the
+ * most recent 90 days of real conversations even when the server clock runs
+ * ahead of the account's activity (nothing to show otherwise). Falls back to a
+ * now-anchored window when there's no data yet.
+ */
+export const REPORT_WINDOW_DAYS = 90;
+
+export async function reportWindow(clientId: string): Promise<{ from: Date; to: Date }> {
+  const latest = await latestActivity(clientId);
+  const to = latest ?? new Date();
+  const from = new Date(to.getTime() - REPORT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  return { from, to };
+}
+
 /**
  * Every thread whose last message falls in [from, to]. Paged explicitly:
  * Supabase caps a select at 1000 rows and a year of a busy location is well

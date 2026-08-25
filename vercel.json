@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/ghl-sync",
       "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/cron/ghl-daily-review",
+      "schedule": "0 15 * * *"
     }
   ]
 }
