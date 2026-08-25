@@ -20,15 +20,19 @@ import type { GhlConversationApi, GhlMessageApi, Message, SyncResult, Thread } f
 /** Threads per database write — bounds peak memory on a large backfill. */
 const WRITE_BATCH = 200;
 
-/** Start of the current calendar year, in UTC — the default "YTD" window. */
-export function startOfYear(now: Date = new Date()): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+/** Number of days in the default reporting/sync window. */
+export const WINDOW_DAYS = 90;
+
+/** Start of the rolling reporting window (last WINDOW_DAYS), in UTC. A full-year
+ * backfill was too heavy to pull on demand; 90 days covers current performance. */
+export function windowStart(now: Date = new Date()): Date {
+  return new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
 }
 
 /**
  * Sync one client.
  *
- * `since` defaults to the start of the year. The sync is idempotent — every
+ * `since` defaults to the last 90 days. The sync is idempotent — every
  * write upserts on the natural key — so re-running a window is safe and is how
  * you repair a partial run.
  */
@@ -46,7 +50,7 @@ export async function syncClient(
   if (!token) throw new Error("No GoHighLevel token stored for this client.");
 
   const ctx = { token, locationId: conn.locationId };
-  const since = opts.since ?? startOfYear();
+  const since = opts.since ?? windowStart();
   const until = new Date();
 
   try {
@@ -153,8 +157,8 @@ export async function syncAllClients(): Promise<{
   failed: number;
   results: { clientId: string; ok: boolean; detail: string }[];
 }> {
-  const WINDOW_DAYS = 14;
-  const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000);
+  const NIGHTLY_DAYS = 14;
+  const since = new Date(Date.now() - NIGHTLY_DAYS * 86_400_000);
 
   const clientIds = await listConnectedClientIds();
   const results: { clientId: string; ok: boolean; detail: string }[] = [];

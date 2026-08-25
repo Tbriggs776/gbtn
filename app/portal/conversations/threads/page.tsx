@@ -5,7 +5,7 @@ import { Threads } from "@/components/portal/ghl/threads";
 import { Transcript } from "@/components/portal/ghl/transcript";
 import { NoConversationsState, NotConnectedState } from "@/components/portal/ghl/empty";
 import { getConnection, getThread, listConversations } from "@/lib/ghl/service";
-import { startOfYear } from "@/lib/ghl/sync";
+import { windowStart } from "@/lib/ghl/sync";
 import { summarize } from "@/lib/ghl/metrics";
 import { dateStamp } from "@/lib/ghl/format";
 
@@ -42,7 +42,7 @@ export default async function ThreadsPage({
     );
   }
 
-  const from = startOfYear();
+  const from = windowStart();
   const to = new Date();
   const rows = await listConversations(activeClient.id, from.toISOString(), to.toISOString());
 
@@ -51,7 +51,7 @@ export default async function ThreadsPage({
   const selected = threadParam ? await getThread(activeClient.id, threadParam) : null;
 
   const summary = summarize(rows);
-  const subtitle = `${summary.leads.toLocaleString()} leads year to date${
+  const subtitle = `${summary.leads.toLocaleString()} leads in the last 90 days${
     connection.lastSyncedAt ? ` · synced ${dateStamp(connection.lastSyncedAt)}` : ""
   }`;
 
