@@ -102,7 +102,7 @@ export function SiteFooter() {
 
         <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center">
           <p className="text-xs text-white/40">
-            © {new Date().getFullYear()} {site.name}. All rights reserved.
+            © {new Date().getFullYear()} {site.legalName} dba {site.name}. All rights reserved.
           </p>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <Link
@@ -110,6 +110,12 @@ export function SiteFooter() {
               className="text-xs text-white/50 transition-colors hover:text-white"
             >
               Privacy Policy
+            </Link>
+            <Link
+              href="/terms"
+              className="text-xs text-white/50 transition-colors hover:text-white"
+            >
+              Terms of Service
             </Link>
             <Link
               href="/sms"

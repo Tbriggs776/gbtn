@@ -46,9 +46,9 @@ export default function PrivacyPage() {
         <div className="mx-auto max-w-3xl space-y-12">
           <div className="space-y-4 text-[15px] leading-relaxed text-muted">
             <p>
-              {site.name} (&ldquo;{site.shortName}&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, or
-              &ldquo;our&rdquo;) provides fractional CFO, advisory, and financial-operations services,
-              together with a secure client portal at{" "}
+              {site.legalName}, doing business as {site.name} (&ldquo;{site.shortName}&rdquo;,
+              &ldquo;we&rdquo;, &ldquo;us&rdquo;, or &ldquo;our&rdquo;), provides fractional CFO,
+              advisory, and financial-operations services, together with a secure client portal at{" "}
               <span className="font-medium text-ink">{site.domain}</span>. We respect your privacy and
               are committed to protecting the personal information you share with us. This policy
               applies to our website, our client portal, and our communications with you, including
@@ -212,7 +212,9 @@ export default function PrivacyPage() {
           <Clause id="contact" title="11. Contact us">
             <p>Questions about this policy or your information? Reach us at:</p>
             <div className="rounded-xl border border-line bg-white px-5 py-4 text-ink">
-              <p className="font-semibold">{site.name}</p>
+              <p className="font-semibold">
+                {site.legalName} <span className="font-normal text-muted">dba {site.name}</span>
+              </p>
               <p className="mt-1 text-sm text-muted">{site.founder.location}</p>
               <p className="mt-2 text-sm">
                 <a href={`mailto:${site.founder.email}`} className="text-brand-700 underline">
