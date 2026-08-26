@@ -9,7 +9,7 @@ import {
   SyncErrorState,
 } from "@/components/portal/ghl/empty";
 import { getConnection, listConversations } from "@/lib/ghl/service";
-import { BUSINESS_HOURS, byChannel, byHour, byMonth, byRep, summarize } from "@/lib/ghl/metrics";
+import { BUSINESS_HOURS, byHour, byMonth, byRep, bySource, summarize } from "@/lib/ghl/metrics";
 import { dateStamp } from "@/lib/ghl/format";
 import { DEFAULT_RANGE, resolveRange, type RangeKey } from "@/lib/ghl/ranges";
 import { DateRange } from "@/components/portal/ghl/date-range";
@@ -89,7 +89,7 @@ export default async function ConversationsPage({
             summary={summary}
             months={byMonth(rows)}
             hours={byHour(rows)}
-            channels={byChannel(rows)}
+            sources={bySource(rows)}
             reps={byRep(rows)}
             // Weekday hours drive the shading; Saturday is shorter and Sunday
             // closed, but shading three different bands on one 24-hour axis

@@ -263,6 +263,44 @@ export function byChannel(rows: ConversationRow[]): ChannelStats[] {
     .sort((a, b) => b.leads - a.leads);
 }
 
+/**
+ * Where a lead came IN — the channel, plus "form" for the form/ad leads that
+ * GHL records as a contact with no pullable message (inbound_seen, zero inbound
+ * messages). This is what surfaces the newly-counted leads by their real door
+ * instead of burying them in "Other".
+ */
+export type LeadSource = Channel | "form";
+export type SourceStats = {
+  source: LeadSource;
+  leads: number;
+  unanswered: number;
+  medianResponse: number | null;
+};
+
+export function sourceOf(r: ConversationRow): LeadSource {
+  return r.inboundCount === 0 && r.inboundSeen ? "form" : r.channel;
+}
+
+export function bySource(rows: ConversationRow[]): SourceStats[] {
+  const groups = new Map<LeadSource, ConversationRow[]>();
+  for (const r of leadThreads(rows)) {
+    const s = sourceOf(r);
+    const list = groups.get(s) ?? [];
+    list.push(r);
+    groups.set(s, list);
+  }
+  return [...groups.entries()]
+    .map(([source, list]) => ({
+      source,
+      leads: list.length,
+      unanswered: list.filter((r) => r.unanswered).length,
+      medianResponse: median(
+        list.filter((r) => r.responseSeconds !== null).map((r) => r.responseSeconds as number)
+      ),
+    }))
+    .sort((a, b) => b.leads - a.leads);
+}
+
 export type MonthStats = {
   /** 'YYYY-MM' */
   month: string;
