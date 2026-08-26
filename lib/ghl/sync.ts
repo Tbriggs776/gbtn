@@ -120,6 +120,39 @@ export async function syncClient(
       // no thread metadata; baseFor derives what it can from the messages
     }
 
+    let savedConversations = 0;
+    let savedMessages = 0;
+    let batch: Thread[] = [];
+
+    // Commit the search-based leads FIRST, before the export. A form/ad/call-in
+    // lead shows up only in the search index (searchInbound), often with no
+    // pullable message at all. Saving those now — as message-less lead rows —
+    // means they're counted even if the export later eats the whole time budget
+    // and the run is killed before its own save (which is exactly what happened
+    // on a busy account, leaving inbound_seen at zero). A thread that DOES have a
+    // transcript gets its messages added by the export pass below; every write is
+    // an idempotent upsert. Only searchInbound records are saved here, so
+    // outbound-only blast targets stay excluded.
+    for (const [conversationId, c] of meta) {
+      if (!searchInbound(c)) continue;
+      const conversation = deriveConversation(baseFor(conversationId, c, []), []);
+      batch.push({
+        ...conversation,
+        assignedUserName: conversation.assignedUserId
+          ? (nameById.get(conversation.assignedUserId) ?? null)
+          : null,
+        messages: [],
+      });
+      if (batch.length >= WRITE_BATCH) {
+        savedConversations += await saveThreads(clientId, batch);
+        batch = [];
+      }
+    }
+    if (batch.length > 0) {
+      savedConversations += await saveThreads(clientId, batch);
+      batch = [];
+    }
+
     const { messages: rawMessages, oldestCovered } = await exportMessages(
       ctx,
       since,
@@ -149,10 +182,6 @@ export async function syncClient(
       byConversation.set(m.conversationId, list);
     }
 
-    let savedConversations = 0;
-    let savedMessages = 0;
-    let batch: Thread[] = [];
-
     for (const [conversationId, messages] of byConversation) {
       const base = baseFor(conversationId, meta.get(conversationId), messages);
       const conversation = deriveConversation(base, messages);
@@ -170,29 +199,6 @@ export async function syncClient(
       if (batch.length >= WRITE_BATCH) {
         savedConversations += await saveThreads(clientId, batch);
         savedMessages += batch.reduce((n, t) => n + t.messages.length, 0);
-        batch = [];
-      }
-    }
-
-    // Inbound leads with no pullable transcript. A form or paid-ad lead is a
-    // contact GHL created, whose inbound the message export doesn't carry — but
-    // the search index still shows the customer reached in (searchInbound). Save
-    // those as message-less threads so they COUNT as leads instead of vanishing.
-    // Conservative by construction: a bare outbound-only contact has
-    // searchInbound=false and is not added here, so blasts stay excluded.
-    for (const [conversationId, c] of meta) {
-      if (byConversation.has(conversationId) || !searchInbound(c)) continue;
-      const base = baseFor(conversationId, c, []);
-      const conversation = deriveConversation(base, []);
-      batch.push({
-        ...conversation,
-        assignedUserName: conversation.assignedUserId
-          ? (nameById.get(conversation.assignedUserId) ?? null)
-          : null,
-        messages: [],
-      });
-      if (batch.length >= WRITE_BATCH) {
-        savedConversations += await saveThreads(clientId, batch);
         batch = [];
       }
     }
