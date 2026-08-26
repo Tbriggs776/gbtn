@@ -221,6 +221,10 @@ export async function exportMessages(
   const floor = since.getTime();
   let oldestCovered = until.getTime();
   let end = until.getTime();
+  // Consecutive failed slices. A few in a row is throttling to skip past; many
+  // in a row means the token is actually down, so bail rather than hammer it.
+  let consecutiveFailures = 0;
+  const MAX_CONSECUTIVE_FAILURES = 5;
   while (end > floor) {
     // Time-box: stop before the serverless invocation is killed. Newest-first
     // means what we've covered is the most recent slice; the caller records
@@ -229,17 +233,19 @@ export async function exportMessages(
     const start = Math.max(floor, end - DAY_MS);
     try {
       await walk(new Date(start), new Date(end));
+      consecutiveFailures = 0;
     } catch {
-      // A slice failed mid-walk — most often an intermittent 401/429 GHL throws
-      // under heavy paging, which must NOT discard the whole run or stall
-      // forward progress. Stop here and return what we've collected; oldestCovered
-      // stays at the last fully-covered day, so the caller advances the cursor to
-      // there and the next run resumes from this point (the failed day is retried,
-      // and every write is an idempotent upsert). Without this, one spurious 401
-      // ~15 days in aborted every run before the cursor moved, so the backfill
-      // could never progress past the same point.
-      break;
+      // A slice failed — most often an intermittent 401/429 GHL throws under
+      // heavy paging. CRITICAL: skip PAST it and keep marching backward rather
+      // than stalling on the newest slice forever. If we stopped here, a slice
+      // that fails near `until` on every run would pin the resume cursor at the
+      // top and the backfill could never reach older days (the bug that left
+      // June/July empty). A skipped day is re-pulled by the nightly full sync,
+      // and every write is an idempotent upsert, so skipping is safe.
+      if (++consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) break;
     }
+    // Advance the cursor whether the slice succeeded or was skipped, so the walk
+    // is guaranteed to progress through the whole window across runs.
     oldestCovered = start;
     end = start;
   }
