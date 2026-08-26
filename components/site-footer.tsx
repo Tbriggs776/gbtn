@@ -100,13 +100,25 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-14 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 sm:flex-row sm:items-center">
+        <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center">
           <p className="text-xs text-white/40">
             © {new Date().getFullYear()} {site.name}. All rights reserved.
           </p>
-          <p className="text-xs text-white/40">
-            Built for owners who run on the numbers.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Link
+              href="/privacy"
+              className="text-xs text-white/50 transition-colors hover:text-white"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              href="/sms"
+              className="text-xs text-white/50 transition-colors hover:text-white"
+            >
+              SMS Terms
+            </Link>
+            <p className="text-xs text-white/40">Built for owners who run on the numbers.</p>
+          </div>
         </div>
       </div>
     </footer>
