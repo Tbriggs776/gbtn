@@ -13,22 +13,22 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ChannelStats, HourStats, MonthStats, RepStats, Summary } from "@/lib/ghl/metrics";
-import { CHANNEL_COLOR, CHANNEL_LABEL, duration, hourLabel, monthLabel, percent, share } from "@/lib/ghl/format";
+import type { HourStats, MonthStats, RepStats, SourceStats, Summary } from "@/lib/ghl/metrics";
+import { SOURCE_COLOR, SOURCE_LABEL, duration, hourLabel, monthLabel, percent, share } from "@/lib/ghl/format";
 import { Panel, Td, Th, Tile } from "./shared";
 
 export function Overview({
   summary,
   months,
   hours,
-  channels,
+  sources,
   reps,
   businessHours,
 }: {
   summary: Summary;
   months: MonthStats[];
   hours: HourStats[];
-  channels: ChannelStats[];
+  sources: SourceStats[];
   reps: RepStats[];
   /** Local open/close per weekday, for shading the arrival chart. */
   businessHours: { open: number; close: number };
@@ -187,38 +187,42 @@ export function Overview({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        {/* ── Channels ── */}
-        <Panel title="By channel" hint="Where the leads come in, and where they go quiet.">
+        {/* ── Sources ── */}
+        <Panel
+          title="By source"
+          hint="Which door each lead came in — text, call, chat, email, or a form/ad lead with no message. Where they come in, and where they go quiet."
+        >
           <table className="w-full border-collapse">
             <thead>
               <tr>
-                <Th>Channel</Th>
+                <Th>Source</Th>
                 <Th right>Leads</Th>
                 <Th right>Never answered</Th>
                 <Th right>Median reply</Th>
               </tr>
             </thead>
             <tbody>
-              {channels.map((c) => (
-                <tr key={c.channel}>
+              {sources.map((s) => (
+                <tr key={s.source}>
                   <Td>
                     <span className="inline-flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-sm"
-                        style={{ backgroundColor: CHANNEL_COLOR[c.channel] }}
+                        style={{ backgroundColor: SOURCE_COLOR[s.source] }}
                       />
-                      {CHANNEL_LABEL[c.channel]}
+                      {SOURCE_LABEL[s.source]}
                     </span>
                   </Td>
-                  <Td right>{c.leads.toLocaleString()}</Td>
-                  <Td right flag={c.unanswered > 0}>
-                    {c.unanswered.toLocaleString()}{" "}
-                    <span className="text-muted-soft">({share(c.unanswered, c.leads)})</span>
+                  <Td right>{s.leads.toLocaleString()}</Td>
+                  <Td right flag={s.unanswered > 0}>
+                    {s.unanswered.toLocaleString()}{" "}
+                    <span className="text-muted-soft">({share(s.unanswered, s.leads)})</span>
                   </Td>
-                  <Td right>{duration(c.medianResponse)}</Td>
+                  {/* Form/ad leads carry no transcript, so there's no reply clock. */}
+                  <Td right>{s.source === "form" ? "—" : duration(s.medianResponse)}</Td>
                 </tr>
               ))}
-              {channels.length === 0 ? (
+              {sources.length === 0 ? (
                 <tr>
                   <Td>No leads in this period.</Td>
                 </tr>

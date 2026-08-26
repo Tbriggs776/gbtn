@@ -53,6 +53,30 @@ export const CHANNEL_COLOR: Record<Channel, string> = {
   other: "#8a8a8a",
 };
 
+/**
+ * Lead source = the channel a lead came in on, PLUS "form" for the form/ad leads
+ * that GHL records without a message we can pull (see metrics.ts sourceOf). It's
+ * the channel breakdown with the form/ad leads split out of "Other", so you can
+ * see where the newly-counted leads actually come from.
+ */
+export const SOURCE_LABEL: Record<string, string> = {
+  sms: "Text",
+  email: "Email",
+  call: "Call",
+  chat: "Chat / DM",
+  form: "Form / Ad",
+  other: "Other",
+};
+
+export const SOURCE_COLOR: Record<string, string> = {
+  sms: "#2f6ea8",
+  email: "#6a5aa8",
+  call: "#2f7d57",
+  chat: "#b3761e",
+  form: "#b3313f",
+  other: "#8a8a8a",
+};
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** 'YYYY-MM' -> 'Jul 26'. String surgery: no Date, so no timezone shift. */
