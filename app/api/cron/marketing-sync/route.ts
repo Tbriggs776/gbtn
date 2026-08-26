@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeCron } from "@/lib/cron-auth";
 import { syncAllCallRail } from "@/lib/marketing/sync";
 
 // Daily marketing sync (Vercel Cron). Protected by CRON_SECRET: Vercel sends it
@@ -7,13 +8,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  // Fail CLOSED: treating a missing secret as "no auth required" let anyone
-  // trigger outbound CallRail calls and service-role writes on demand.
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "cron not configured" }, { status: 503 });
-  }
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Fail CLOSED: only a matching Vercel env or DB-held cron secret authorizes;
+  // without either, nothing can trigger outbound calls or service-role writes.
+  if (!(await authorizeCron(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

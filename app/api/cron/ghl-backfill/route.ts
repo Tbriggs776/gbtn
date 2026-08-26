@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeCron } from "@/lib/cron-auth";
 import { runBackfillSweep } from "@/lib/ghl/sync";
 
 // High-frequency GoHighLevel backfill sweep (Vercel Cron, every 10 minutes).
@@ -14,13 +15,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  // Fail CLOSED: a missing secret must not become "no auth required", or anyone
-  // could trigger outbound GHL calls and service-role writes on demand.
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "cron not configured" }, { status: 503 });
-  }
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  // Fail CLOSED: only a matching Vercel env or DB-held cron secret authorizes;
+  // without either, nothing can trigger outbound GHL calls or service-role writes.
+  if (!(await authorizeCron(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
