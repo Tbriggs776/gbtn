@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { authorizeCron } from "@/lib/cron-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCallRailConfig, syncCallRailCalls } from "@/lib/crm/callrail";
 
@@ -8,9 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return NextResponse.json({ error: "cron not configured" }, { status: 503 });
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!(await authorizeCron(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
