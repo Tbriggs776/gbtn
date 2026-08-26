@@ -81,12 +81,19 @@ export async function syncClient(
   const walkEnd = resume && resume.getTime() > since.getTime() ? resume : until;
 
   try {
-    // Resolve reps once. A message only carries an opaque userId, and looking
-    // it up per message would be thousands of redundant calls.
-    const users = await listUsers(ctx);
+    // Resolve reps once, for name lookup only. NON-FATAL: /users/ needs the
+    // users.readonly scope, which a token scoped only to conversations lacks —
+    // and a 401/403 here must NOT abort the whole sync, or the messages (the
+    // actual data) never get pulled. Rep names simply degrade to null. This was
+    // the bug that left the DB near-empty: listUsers threw first and killed
+    // every run before a single message was exported.
     const nameById = new Map<string, string>();
-    for (const u of users) {
-      if (typeof u.id === "string") nameById.set(u.id, userName(u));
+    try {
+      for (const u of await listUsers(ctx)) {
+        if (typeof u.id === "string") nameById.set(u.id, userName(u));
+      }
+    } catch {
+      // no rep directory; assignedUserName falls back to null below
     }
 
     const { messages: rawMessages, oldestCovered } = await exportMessages(
@@ -119,10 +126,17 @@ export async function syncClient(
     }
 
     // Thread metadata: contact name/phone/email and assignment, which the
-    // message stream doesn't carry.
+    // message stream doesn't carry. Also NON-FATAL for the same reason — if
+    // /conversations/search errors, contact names/phones fall back to whatever
+    // the transcript carries (see baseFor); no metric is wrong, and the messages
+    // already pulled are still saved rather than thrown away.
     const meta = new Map<string, GhlConversationApi>();
-    for (const c of await listConversations(ctx, since, deadline)) {
-      if (typeof c.id === "string") meta.set(c.id, c);
+    try {
+      for (const c of await listConversations(ctx, since, deadline)) {
+        if (typeof c.id === "string") meta.set(c.id, c);
+      }
+    } catch {
+      // no thread metadata; baseFor derives what it can from the messages
     }
 
     let savedConversations = 0;
