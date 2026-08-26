@@ -4,6 +4,7 @@ import { bodyOf, channelOf, directionOf, isActivity, isAutomated, toIso, userNam
 import { deriveConversation, type ThreadBase } from "./derive";
 import {
   getConnection,
+  listBackfillPendingClientIds,
   listConnectedClientIds,
   markSynced,
   readToken,
@@ -32,7 +33,7 @@ const WRITE_BATCH = 200;
 const SYNC_BUDGET_MS = 230_000;
 
 /** Number of days in the default reporting/sync window. */
-export const WINDOW_DAYS = 30;
+export const WINDOW_DAYS = 90;
 
 /** Start of the rolling reporting window (last WINDOW_DAYS), in UTC. A full-year
  * backfill was too heavy to pull on demand; 90 days covers current performance. */
@@ -49,7 +50,7 @@ export function windowStart(now: Date = new Date()): Date {
  */
 export async function syncClient(
   clientId: string,
-  opts: { since?: Date; backfill?: boolean } = {}
+  opts: { since?: Date; backfill?: boolean; deadline?: number } = {}
 ): Promise<SyncResult> {
   const conn = await getConnection(clientId);
   if (!conn) throw new Error("GoHighLevel isn't connected for this client.");
@@ -67,8 +68,10 @@ export async function syncClient(
   // Time-box the run so a busy account degrades into a resumable partial sync
   // instead of a 504. The export walks newest-first, so a run that stops at the
   // deadline has covered the most recent days; we persist how far back it got
-  // and the next click picks up from there.
-  const deadline = Date.now() + SYNC_BUDGET_MS;
+  // and the next click picks up from there. A sweep over several clients passes
+  // one shared deadline so their budgets add up to a single invocation, not one
+  // full budget each.
+  const deadline = opts.deadline ?? Date.now() + SYNC_BUDGET_MS;
 
   // On a backfill, resume from where the last run stopped (backfillThrough).
   // The export still walks down from that point toward `since`. A fresh sync,
@@ -185,12 +188,12 @@ export async function syncClient(
 /**
  * Nightly sync for every connected client.
  *
- * Reads the rolling 30-day window. GHL can backdate a message (a call logged
+ * Reads the rolling 90-day window. GHL can backdate a message (a call logged
  * late, a delayed email receipt), so re-reading only "since yesterday" would
  * miss it. Runs in backfill mode: each night is time-boxed and resumes from the
- * prior run's cursor, so a busy account whose 30 days can't be pulled in one
+ * prior run's cursor, so a busy account whose 90 days can't be pulled in one
  * invocation finishes it across successive nights unattended — the same resume
- * machinery the manual Sync button drives.
+ * machinery the manual Sync button and the every-10-min sweep drive.
  *
  * One client's failure never stops the others — the error is recorded on that
  * client's connection and the loop continues.
@@ -200,8 +203,7 @@ export async function syncAllClients(): Promise<{
   failed: number;
   results: { clientId: string; ok: boolean; detail: string }[];
 }> {
-  const NIGHTLY_DAYS = 30;
-  const since = new Date(Date.now() - NIGHTLY_DAYS * 86_400_000);
+  const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000);
 
   const clientIds = await listConnectedClientIds();
   const results: { clientId: string; ok: boolean; detail: string }[] = [];
@@ -230,6 +232,60 @@ export async function syncAllClients(): Promise<{
   }
 
   return { synced, failed, results };
+}
+
+/** Wall-clock budget for one sweep invocation, shared across every client it
+ *  touches. Under the route's 300s limit with headroom for the final write. */
+const SWEEP_BUDGET_MS = 270_000;
+
+/**
+ * High-frequency backfill sweep (every-10-min cron).
+ *
+ * Drives the resumable backfill to completion without anyone clicking Sync: it
+ * only picks up clients whose window isn't built yet (see
+ * listBackfillPendingClientIds) and shares ONE deadline across them, so several
+ * clients advance within a single invocation instead of each taking a full
+ * budget. When every client's window is complete the work list is empty and the
+ * sweep is a no-op — it goes idle on its own, and the nightly full sync takes
+ * over maintenance. `done` reports whether nothing was left to do.
+ */
+export async function runBackfillSweep(): Promise<{
+  processed: number;
+  done: boolean;
+  results: { clientId: string; ok: boolean; detail: string }[];
+}> {
+  const since = new Date(Date.now() - WINDOW_DAYS * 86_400_000);
+  const deadline = Date.now() + SWEEP_BUDGET_MS;
+
+  const clientIds = await listBackfillPendingClientIds();
+  const results: { clientId: string; ok: boolean; detail: string }[] = [];
+
+  for (const clientId of clientIds) {
+    // Stop before the invocation is killed; the clients we didn't reach stay on
+    // the pending list and the next tick (10 min later) picks them up.
+    if (Date.now() >= deadline) break;
+    try {
+      const r = await syncClient(clientId, { since, backfill: true, deadline });
+      results.push({
+        clientId,
+        ok: true,
+        detail: r.complete
+          ? `complete (${r.conversations} conversations)`
+          : `backfilled to ${r.oldestCovered.slice(0, 10)}, more remaining`,
+      });
+    } catch (e) {
+      results.push({
+        clientId,
+        ok: false,
+        detail: e instanceof Error ? e.message : "sync failed",
+      });
+    }
+  }
+
+  // `done` is meaningful only when we worked the whole list: an empty list means
+  // nothing is pending (fully idle). If we stopped at the deadline, more remains.
+  const done = clientIds.length === 0;
+  return { processed: results.length, done, results };
 }
 
 /** One export row → our Message, or null if it can't be used. */
