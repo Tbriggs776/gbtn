@@ -25,6 +25,11 @@ const PAGE = 100;
 /** Stop conditions, so a pathological account can never spin forever. */
 const MAX_PAGES = 500;
 
+/** Per-request timeout. A throttled GHL sometimes hangs a call instead of
+ *  answering; without a bound, one hang stalls the whole sync until the
+ *  serverless function is killed. 30s is generous for a normal response. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 // Day-chunked export tuning (see exportMessages).
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Never split a slice below this — an hour is finer than any real burst. */
@@ -80,14 +85,33 @@ async function get<T>(
   // that, so one retry is enough to ride out a shared-quota blip without
   // turning a genuine outage into a long hang.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${ctx.token}`,
-        Version: version,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${ctx.token}`,
+          Version: version,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        // Bound every request. Under throttling GHL sometimes HANGS a request
+        // (esp. /users/ and /search) instead of answering — and fetch has no
+        // default timeout, so one hung call would block the whole sync until the
+        // serverless function is killed at 300s, leaving the resume cursor
+        // unmoved. Abort after REQUEST_TIMEOUT_MS so a hang becomes a fast,
+        // catchable failure that the non-fatal metadata / skip-past handlers
+        // absorb, letting the backfill keep advancing.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      // Network error or timeout (AbortError). Retry once, then surface it as a
+      // transient — walk()/listUsers already treat a throw as skippable.
+      if (attempt === 0) {
+        await sleep(2000);
+        continue;
+      }
+      throw new GhlError(`GoHighLevel request to ${path} timed out.`, 504);
+    }
 
     if (res.ok) return (await res.json()) as T;
 
