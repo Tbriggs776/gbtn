@@ -1,6 +1,15 @@
 import "server-only";
 import { exportMessages, listConversations, listUsers } from "./client";
-import { bodyOf, channelOf, directionOf, isActivity, isAutomated, toIso, userName } from "./map";
+import {
+  bodyOf,
+  channelOf,
+  directionOf,
+  isActivity,
+  isAutomated,
+  searchInbound,
+  toIso,
+  userName,
+} from "./map";
 import { deriveConversation, type ThreadBase } from "./derive";
 import {
   getConnection,
@@ -160,6 +169,29 @@ export async function syncClient(
       if (batch.length >= WRITE_BATCH) {
         savedConversations += await saveThreads(clientId, batch);
         savedMessages += batch.reduce((n, t) => n + t.messages.length, 0);
+        batch = [];
+      }
+    }
+
+    // Inbound leads with no pullable transcript. A form or paid-ad lead is a
+    // contact GHL created, whose inbound the message export doesn't carry — but
+    // the search index still shows the customer reached in (searchInbound). Save
+    // those as message-less threads so they COUNT as leads instead of vanishing.
+    // Conservative by construction: a bare outbound-only contact has
+    // searchInbound=false and is not added here, so blasts stay excluded.
+    for (const [conversationId, c] of meta) {
+      if (byConversation.has(conversationId) || !searchInbound(c)) continue;
+      const base = baseFor(conversationId, c, []);
+      const conversation = deriveConversation(base, []);
+      batch.push({
+        ...conversation,
+        assignedUserName: conversation.assignedUserId
+          ? (nameById.get(conversation.assignedUserId) ?? null)
+          : null,
+        messages: [],
+      });
+      if (batch.length >= WRITE_BATCH) {
+        savedConversations += await saveThreads(clientId, batch);
         batch = [];
       }
     }
@@ -349,6 +381,10 @@ function baseFor(
     assignedUserName: null, // resolved by the caller once the owner is settled
     dateAdded: toIso(c?.dateAdded as string | number | undefined),
     lastMessageAt: toIso(c?.lastMessageDate as string | number | undefined),
+    // From the search record only — a form/ad lead reaches in without a message
+    // we can pull. When there's no search record (transcript-only thread), the
+    // inbound messages themselves establish the lead, so false is safe here.
+    inboundSeen: c ? searchInbound(c) : false,
   };
 }
 

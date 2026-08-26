@@ -103,6 +103,13 @@ export type Conversation = {
   unanswered: boolean;
   outboundOnly: boolean;
   /**
+   * The customer reached IN, per the conversation search index — an inbound
+   * last message or an unread inbound — even when the message export carried no
+   * inbound message we could store. This is what lets a form/ad lead count as a
+   * lead instead of being filed as "outbound only". See map.ts `searchInbound`.
+   */
+  inboundSeen: boolean;
+  /**
    * An automation replied but no person ever did. These look answered in GHL's
    * inbox and are the single most useful thing this report surfaces.
    */

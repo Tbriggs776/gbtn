@@ -49,13 +49,15 @@ export const HOUR_SECONDS = 60 * 60;
 // ── Cohorts ──────────────────────────────────────────────────────────────────
 
 /**
- * Threads where a real person wrote in. Everything else — outbound-only drips,
- * threads with no messages at all — is excluded from every metric, because
- * including them answers a question nobody asked ("how fast do we reply to
- * ourselves?") and drags every average toward zero.
+ * Threads where the customer reached IN — a lead. That's an inbound message we
+ * captured (text, call, chat, email) OR the search index showing the customer
+ * initiated (a form or paid-ad lead whose inbound GHL never exposed as a message
+ * — see inboundSeen / map.ts searchInbound). Pure outbound-only drips and blasts
+ * are still excluded: including them answers "how fast do we reply to ourselves?"
+ * and drags every average toward zero.
  */
 export function leadThreads(rows: ConversationRow[]): ConversationRow[] {
-  return rows.filter((r) => !r.outboundOnly && r.inboundCount > 0);
+  return rows.filter((r) => r.inboundCount > 0 || r.inboundSeen);
 }
 
 // ── Local time ───────────────────────────────────────────────────────────────

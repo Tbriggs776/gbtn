@@ -183,6 +183,16 @@ export async function saveThreads(clientId: string, threads: Thread[]): Promise<
       assigned_user_id: t.assignedUserId ?? prior?.assigned_user_id ?? null,
       assigned_user_name: t.assignedUserName ?? prior?.assigned_user_name ?? null,
       date_added: t.dateAdded ?? prior?.date_added ?? null,
+      // last_message_at and channel are normally recomputed from the transcript
+      // (pass 3), but a message-less inbound lead (form/ad) has no transcript, so
+      // seed them here from the search record. Recompute skips empty threads, so
+      // these survive. For a thread WITH messages, pass 3 overwrites with the
+      // transcript-derived values, so seeding here is harmless.
+      last_message_at: t.lastMessageAt ?? prior?.last_message_at ?? null,
+      channel: t.channel ?? prior?.channel ?? "other",
+      // Sticky once true: an incremental run without this thread's search record
+      // (its dateAdded is out of range) must not clear a lead flag we already set.
+      inbound_seen: t.inboundSeen || prior?.inbound_seen || false,
       synced_at: now,
     };
   });
@@ -239,6 +249,9 @@ type PriorMetadata = {
   assigned_user_id: string | null;
   assigned_user_name: string | null;
   date_added: string | null;
+  last_message_at: string | null;
+  channel: string | null;
+  inbound_seen: boolean;
 };
 
 /** What we already know about these threads, so a sync never blanks a field. */
@@ -254,7 +267,7 @@ async function existingMetadata(
     const { data, error } = await admin
       .from("ghl_conversations")
       .select(
-        "ghl_id, contact_id, contact_name, contact_email, contact_phone, assigned_user_id, assigned_user_name, date_added"
+        "ghl_id, contact_id, contact_name, contact_email, contact_phone, assigned_user_id, assigned_user_name, date_added, last_message_at, channel, inbound_seen"
       )
       .eq("client_id", clientId)
       .in("ghl_id", ghlIds.slice(i, i + 100));
@@ -268,6 +281,9 @@ async function existingMetadata(
         assigned_user_id: (r.assigned_user_id as string | null) ?? null,
         assigned_user_name: (r.assigned_user_name as string | null) ?? null,
         date_added: (r.date_added as string | null) ?? null,
+        last_message_at: (r.last_message_at as string | null) ?? null,
+        channel: (r.channel as string | null) ?? null,
+        inbound_seen: Boolean(r.inbound_seen),
       });
     }
   }
@@ -291,11 +307,17 @@ export async function recomputeAggregates(
   const admin = createAdminClient();
   const transcripts = await getTranscripts(clientId, conversationIds);
 
-  const updates = conversationIds.map((id) => {
-    const messages = transcripts.get(id) ?? [];
-    const d = deriveConversation(STUB_BASE, messages);
-    return {
-      id,
+  const updates = conversationIds
+    // A message-less thread (an inbound form/ad lead with no pullable transcript)
+    // has nothing to recompute, and running the stub over zero messages would
+    // null out the last_message_at and channel that pass 1 seeded from the search
+    // record — dropping the lead out of the date-range filter. Leave it as saved.
+    .filter((id) => (transcripts.get(id)?.length ?? 0) > 0)
+    .map((id) => {
+      const messages = transcripts.get(id) ?? [];
+      const d = deriveConversation(STUB_BASE, messages);
+      return {
+        id,
       client_id: clientId,
       channel: d.channel,
       last_message_at: d.lastMessageAt,
@@ -337,6 +359,10 @@ const STUB_BASE = {
   assignedUserName: null,
   dateAdded: null,
   lastMessageAt: null,
+  // The transcript recompute can't see the search index, so it never RE-derives
+  // inbound_seen. Left false here and omitted from the recompute's write set
+  // (below), so the value set in pass 1 from the search record is preserved.
+  inboundSeen: false,
 };
 
 // ── Reading ──────────────────────────────────────────────────────────────────
@@ -547,6 +573,7 @@ function toConversationRow(r: Row): ConversationRow {
     unanswered: Boolean(r.unanswered),
     outboundOnly: Boolean(r.outbound_only),
     autoRepliedOnly: Boolean(r.auto_replied_only),
+    inboundSeen: Boolean(r.inbound_seen),
   };
 }
 

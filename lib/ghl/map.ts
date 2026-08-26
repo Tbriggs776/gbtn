@@ -78,6 +78,27 @@ export function isActivity(messageType: string | null | undefined): boolean {
 }
 
 /**
+ * Did the customer reach IN, per the conversation search record?
+ *
+ * The message export only carries text/call/chat/email transcripts. A form fill
+ * or paid-ad lead is created as a contact and shows up ONLY in the search index
+ * — often with no pullable message at all. But the search record still tells us
+ * the customer initiated: the last message on the thread was inbound, or there's
+ * an unread inbound waiting. Either is enough to count the thread as a lead even
+ * when we hold no inbound message for it. Kept conservative on purpose — it does
+ * NOT treat a bare outbound-only contact (a blast target) as a lead.
+ */
+export function searchInbound(c: {
+  lastMessageDirection?: unknown;
+  unreadCount?: unknown;
+}): boolean {
+  const dir = String(c.lastMessageDirection ?? "").toLowerCase();
+  if (dir === "inbound") return true;
+  const unread = typeof c.unreadCount === "number" ? c.unreadCount : Number(c.unreadCount ?? 0);
+  return Number.isFinite(unread) && unread > 0;
+}
+
+/**
  * Which way the message went.
  *
  * GHL is inconsistent here: the conversations API returns the string
