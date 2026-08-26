@@ -91,7 +91,11 @@ async function get<T>(
 
     if (res.ok) return (await res.json()) as T;
 
-    const retryable = res.status === 429 || res.status >= 500;
+    // 401 is included deliberately: under heavy paging GHL intermittently
+    // returns 401 on a token that is actually valid (verified: the same token
+    // 200s a moment later). Retrying once absorbs that blip; a genuinely bad
+    // token just 401s again on the retry and surfaces the same clear error.
+    const retryable = res.status === 401 || res.status === 429 || res.status >= 500;
     if (retryable && attempt === 0) {
       // GHL publishes the window on the response; prefer it over guessing.
       const interval = Number(res.headers.get("x-ratelimit-interval-milliseconds"));
@@ -223,7 +227,19 @@ export async function exportMessages(
     // oldestCovered as a resume point and continues on the next run.
     if (deadline && Date.now() >= deadline) break;
     const start = Math.max(floor, end - DAY_MS);
-    await walk(new Date(start), new Date(end));
+    try {
+      await walk(new Date(start), new Date(end));
+    } catch {
+      // A slice failed mid-walk — most often an intermittent 401/429 GHL throws
+      // under heavy paging, which must NOT discard the whole run or stall
+      // forward progress. Stop here and return what we've collected; oldestCovered
+      // stays at the last fully-covered day, so the caller advances the cursor to
+      // there and the next run resumes from this point (the failed day is retried,
+      // and every write is an idempotent upsert). Without this, one spurious 401
+      // ~15 days in aborted every run before the cursor moved, so the backfill
+      // could never progress past the same point.
+      break;
+    }
     oldestCovered = start;
     end = start;
   }
