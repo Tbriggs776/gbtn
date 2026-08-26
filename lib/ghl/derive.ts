@@ -25,6 +25,8 @@ export type ThreadBase = {
   assignedUserName: string | null;
   dateAdded: string | null;
   lastMessageAt: string | null;
+  /** The search index shows the customer reached in (see map.ts searchInbound). */
+  inboundSeen: boolean;
 };
 
 /**
@@ -72,6 +74,11 @@ export function deriveConversation(base: ThreadBase, messages: Message[]): Conve
       ? Math.max(0, Math.round((Date.parse(firstResponseAt) - Date.parse(firstInboundAt)) / 1000))
       : null;
 
+  // Purely a transcript fact: no inbound MESSAGES, some outbound. Kept
+  // independent of inboundSeen so the pass-3 recompute (which can't see the
+  // search index) stays consistent. Whether a thread counts as a LEAD is decided
+  // in metrics.ts leadThreads, which also honours inboundSeen — so a form/ad lead
+  // we only auto-replied to is outbound-only by transcript yet still a lead.
   const outboundOnly = inbound === 0 && outbound > 0;
   // "Unanswered" means a person said something and no person came back. A
   // thread with no messages at all is neither answered nor unanswered.
@@ -106,6 +113,7 @@ export function deriveConversation(base: ThreadBase, messages: Message[]): Conve
     unanswered,
     outboundOnly,
     autoRepliedOnly,
+    inboundSeen: base.inboundSeen,
   };
 }
 
