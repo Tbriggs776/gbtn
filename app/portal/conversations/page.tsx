@@ -3,21 +3,23 @@ import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui
 import { ConversationsShell as Shell } from "@/components/portal/ghl/shell";
 import { Overview } from "@/components/portal/ghl/overview";
 import {
+  EmptyRangeState,
   NoConversationsState,
   NotConnectedState,
   SyncErrorState,
 } from "@/components/portal/ghl/empty";
 import { getConnection, listConversations } from "@/lib/ghl/service";
-import { reportWindow } from "@/lib/ghl/service";
 import { BUSINESS_HOURS, byChannel, byHour, byMonth, byRep, summarize } from "@/lib/ghl/metrics";
 import { dateStamp } from "@/lib/ghl/format";
+import { DEFAULT_RANGE, resolveRange, type RangeKey } from "@/lib/ghl/ranges";
+import { DateRange } from "@/components/portal/ghl/date-range";
 
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ client?: string }>;
+  searchParams: Promise<{ client?: string; range?: string; from?: string; to?: string }>;
 }) {
-  const { client: clientParam } = await searchParams;
+  const { client: clientParam, range, from: fromParam, to: toParam } = await searchParams;
   const session = await getSession();
   const activeClient = await getActiveClient(clientParam);
   // Gate before any data fetch: this page reads via the service role, which
@@ -47,16 +49,28 @@ export default async function ConversationsPage({
     );
   }
 
-  const { from, to } = await reportWindow(activeClient.id);
-  const rows = await listConversations(activeClient.id, from.toISOString(), to.toISOString());
+  const window = resolveRange(range, new Date(), fromParam, toParam);
+  const rows = await listConversations(
+    activeClient.id,
+    window.from.toISOString(),
+    window.to.toISOString()
+  );
 
   const summary = summarize(rows);
-  const subtitle = `${summary.leads.toLocaleString()} leads in the last 90 days${
+  const subtitle = `${summary.leads.toLocaleString()} leads · ${window.label.toLowerCase()}${
     connection.lastSyncedAt ? ` · synced ${dateStamp(connection.lastSyncedAt)}` : ""
   }`;
 
   return (
     <Shell client={activeClient.name} clientId={activeClient.id} subtitle={subtitle}>
+      <div className="mb-5">
+        <DateRange
+          current={(window.key as RangeKey) ?? DEFAULT_RANGE}
+          from={fromParam}
+          to={toParam}
+        />
+      </div>
+
       {connection.lastSyncError ? (
         <div className="mb-5">
           <SyncErrorState message={connection.lastSyncError} />
@@ -64,7 +78,11 @@ export default async function ConversationsPage({
       ) : null}
 
       {rows.length === 0 ? (
-        <NoConversationsState />
+        connection.lastSyncedAt ? (
+          <EmptyRangeState label={window.label} />
+        ) : (
+          <NoConversationsState />
+        )
       ) : (
         <>
           <Overview

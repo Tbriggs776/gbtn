@@ -14,12 +14,23 @@ export function NotConnectedState({ isAdmin }: { isAdmin: boolean }) {
   );
 }
 
-/** Connected, but nothing synced yet. */
+/** Connected, but nothing synced yet. Syncing is automatic (Supabase cron), so
+ *  this is a "give it a moment" state, not a "go press a button" one. */
 export function NoConversationsState() {
   return (
     <EmptyState
-      title="Nothing synced yet"
-      body="Hit “Sync from GoHighLevel” to pull this year's conversations. The first run reads the whole year and takes a minute or two."
+      title="Nothing here yet"
+      body="Conversations sync automatically in the background. If this is a brand-new connection, the first pull takes a little while to appear."
+    />
+  );
+}
+
+/** Connected and synced, but the selected date range has no leads in it. */
+export function EmptyRangeState({ label }: { label: string }) {
+  return (
+    <EmptyState
+      title={`No leads in ${label.toLowerCase()}`}
+      body="Nobody wrote in during this range. Try a wider window — Last 30 days or This month."
     />
   );
 }
