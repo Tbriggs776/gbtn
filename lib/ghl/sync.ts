@@ -2,7 +2,14 @@ import "server-only";
 import { exportMessages, listConversations, listUsers } from "./client";
 import { bodyOf, channelOf, directionOf, isActivity, isAutomated, toIso, userName } from "./map";
 import { deriveConversation, type ThreadBase } from "./derive";
-import { getConnection, listConnectedClientIds, markSynced, readToken, saveThreads } from "./service";
+import {
+  getConnection,
+  listConnectedClientIds,
+  markSynced,
+  readToken,
+  saveThreads,
+  setBackfillThrough,
+} from "./service";
 import type { GhlConversationApi, GhlMessageApi, Message, SyncResult, Thread } from "./types";
 
 // Pull a window of GoHighLevel conversations into our tables.
@@ -19,6 +26,10 @@ import type { GhlConversationApi, GhlMessageApi, Message, SyncResult, Thread } f
 
 /** Threads per database write — bounds peak memory on a large backfill. */
 const WRITE_BATCH = 200;
+
+/** Per-run wall-clock budget. Stays safely under the 300s serverless limit so a
+ *  busy account degrades into a resumable partial run instead of a 504. */
+const SYNC_BUDGET_MS = 230_000;
 
 /** Number of days in the default reporting/sync window. */
 export const WINDOW_DAYS = 30;
@@ -38,7 +49,7 @@ export function windowStart(now: Date = new Date()): Date {
  */
 export async function syncClient(
   clientId: string,
-  opts: { since?: Date } = {}
+  opts: { since?: Date; backfill?: boolean } = {}
 ): Promise<SyncResult> {
   const conn = await getConnection(clientId);
   if (!conn) throw new Error("GoHighLevel isn't connected for this client.");
@@ -53,6 +64,19 @@ export async function syncClient(
   const since = opts.since ?? windowStart();
   const until = new Date();
 
+  // Time-box the run so a busy account degrades into a resumable partial sync
+  // instead of a 504. The export walks newest-first, so a run that stops at the
+  // deadline has covered the most recent days; we persist how far back it got
+  // and the next click picks up from there.
+  const deadline = Date.now() + SYNC_BUDGET_MS;
+
+  // On a backfill, resume from where the last run stopped (backfillThrough).
+  // The export still walks down from that point toward `since`. A fresh sync,
+  // or one whose cursor is already past the window, walks from `until`.
+  const resume =
+    opts.backfill && conn.backfillThrough ? new Date(conn.backfillThrough) : null;
+  const walkEnd = resume && resume.getTime() > since.getTime() ? resume : until;
+
   try {
     // Resolve reps once. A message only carries an opaque userId, and looking
     // it up per message would be thousands of redundant calls.
@@ -62,7 +86,12 @@ export async function syncClient(
       if (typeof u.id === "string") nameById.set(u.id, userName(u));
     }
 
-    const rawMessages = await exportMessages(ctx, since, until);
+    const { messages: rawMessages, oldestCovered } = await exportMessages(
+      ctx,
+      since,
+      walkEnd,
+      deadline
+    );
 
     // Normalise, dropping CRM bookkeeping and anything we can't place in a
     // thread. `skipped` is reported rather than swallowed — a sync that
@@ -89,7 +118,7 @@ export async function syncClient(
     // Thread metadata: contact name/phone/email and assignment, which the
     // message stream doesn't carry.
     const meta = new Map<string, GhlConversationApi>();
-    for (const c of await listConversations(ctx, since)) {
+    for (const c of await listConversations(ctx, since, deadline)) {
       if (typeof c.id === "string") meta.set(c.id, c);
     }
 
@@ -123,6 +152,16 @@ export async function syncClient(
       savedMessages += batch.reduce((n, t) => n + t.messages.length, 0);
     }
 
+    // Did this run reach the far edge of the window? oldestCovered is where the
+    // export stopped — either `since` (done) or the deadline cutoff (more left).
+    const complete = oldestCovered.getTime() <= since.getTime();
+
+    // Persist the resume point only for a backfill: clear it when complete so the
+    // next click starts fresh at `until`, otherwise record how far back we got.
+    if (opts.backfill) {
+      await setBackfillThrough(clientId, complete ? null : oldestCovered);
+    }
+
     await markSynced(clientId);
 
     return {
@@ -131,6 +170,8 @@ export async function syncClient(
       skipped,
       from: since.toISOString(),
       to: until.toISOString(),
+      complete,
+      oldestCovered: oldestCovered.toISOString(),
     };
   } catch (e) {
     // Record why, so the portal can say "needs reauth" instead of silently
@@ -144,10 +185,12 @@ export async function syncClient(
 /**
  * Nightly sync for every connected client.
  *
- * Reads a rolling 14-day window rather than the full year: GHL can backdate a
- * message (a call logged late, a delayed email receipt), so re-reading only
- * "since yesterday" would miss it, while re-reading the year every night is
- * hundreds of needless requests. Two weeks covers the realistic lag.
+ * Reads the rolling 30-day window. GHL can backdate a message (a call logged
+ * late, a delayed email receipt), so re-reading only "since yesterday" would
+ * miss it. Runs in backfill mode: each night is time-boxed and resumes from the
+ * prior run's cursor, so a busy account whose 30 days can't be pulled in one
+ * invocation finishes it across successive nights unattended — the same resume
+ * machinery the manual Sync button drives.
  *
  * One client's failure never stops the others — the error is recorded on that
  * client's connection and the loop continues.
@@ -167,12 +210,14 @@ export async function syncAllClients(): Promise<{
 
   for (const clientId of clientIds) {
     try {
-      const r = await syncClient(clientId, { since });
+      const r = await syncClient(clientId, { since, backfill: true });
       synced++;
       results.push({
         clientId,
         ok: true,
-        detail: `${r.conversations} conversations, ${r.messages} messages`,
+        detail: `${r.conversations} conversations, ${r.messages} messages${
+          r.complete ? "" : ` (backfill to ${r.oldestCovered.slice(0, 10)}, more remaining)`
+        }`,
       });
     } catch (e) {
       failed++;

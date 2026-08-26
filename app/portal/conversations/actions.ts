@@ -20,7 +20,14 @@ import {
 
 export type ActionState = { ok?: boolean; message?: string; error?: string };
 
-/** Pull GHL into our tables. Defaults to the last 90 days. */
+/**
+ * Pull GHL into our tables, over the last 30 days.
+ *
+ * Runs as a resumable backfill: each click is time-boxed to stay under the
+ * serverless limit, walks newest-first, and records how far back it reached. A
+ * busy account whose full window can't be pulled in one shot reports where it
+ * stopped and finishes on the next click — the nightly cron also advances it.
+ */
 export async function syncAction(
   _prev: ActionState,
   formData: FormData
@@ -39,13 +46,14 @@ export async function syncAction(
   if (Number.isNaN(since.getTime())) return { error: "That start date isn't valid." };
 
   try {
-    const result = await syncClient(clientId, { since });
+    const result = await syncClient(clientId, { since, backfill: true });
     revalidatePath("/portal/conversations");
     const skipped = result.skipped > 0 ? ` ${result.skipped} messages skipped.` : "";
-    return {
-      ok: true,
-      message: `Synced ${result.conversations.toLocaleString()} conversations and ${result.messages.toLocaleString()} messages.${skipped}`,
-    };
+    const synced = `Synced ${result.conversations.toLocaleString()} conversations and ${result.messages.toLocaleString()} messages.`;
+    const progress = result.complete
+      ? " The last 30 days are fully loaded."
+      : ` Reached ${result.oldestCovered.slice(0, 10)} so far — click Sync again to keep building the database.`;
+    return { ok: true, message: `${synced}${progress}${skipped}` };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "The GoHighLevel sync failed." };
   }

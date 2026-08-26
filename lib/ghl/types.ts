@@ -136,6 +136,8 @@ export type ConnectionRow = {
   status: string;
   lastSyncedAt: string | null;
   lastSyncError: string | null;
+  /** Oldest date the time-boxed backfill has reached; null = complete/not started. */
+  backfillThrough: string | null;
 };
 
 export type SyncResult = {
@@ -145,4 +147,8 @@ export type SyncResult = {
   skipped: number;
   from: string;
   to: string;
+  /** True once the whole window is synced; false if time-boxed and more remains. */
+  complete: boolean;
+  /** Oldest date reached this run (ISO) — the resume point when not complete. */
+  oldestCovered: string;
 };

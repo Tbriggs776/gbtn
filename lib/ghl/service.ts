@@ -25,7 +25,7 @@ export async function getConnection(clientId: string): Promise<ConnectionRow | n
     .from("ghl_connections")
     // secret_ref is deliberately absent: nothing above this line should ever
     // hold a handle to the token, even an opaque one.
-    .select("client_id, location_id, display_name, hint, status, last_synced_at, last_sync_error")
+    .select("client_id, location_id, display_name, hint, status, last_synced_at, last_sync_error, backfill_through")
     .eq("client_id", clientId)
     .maybeSingle();
   if (error || !data) return null;
@@ -37,7 +37,17 @@ export async function getConnection(clientId: string): Promise<ConnectionRow | n
     status: (data.status as string) ?? "pending",
     lastSyncedAt: (data.last_synced_at as string | null) ?? null,
     lastSyncError: (data.last_sync_error as string | null) ?? null,
+    backfillThrough: (data.backfill_through as string | null) ?? null,
   };
+}
+
+/** Record the backfill resume point (oldest date reached), or null when done. */
+export async function setBackfillThrough(clientId: string, through: Date | null): Promise<void> {
+  const admin = createAdminClient();
+  await admin
+    .from("ghl_connections")
+    .update({ backfill_through: through ? through.toISOString() : null, updated_at: new Date().toISOString() })
+    .eq("client_id", clientId);
 }
 
 /** Clients with a live GHL connection — the nightly cron's work list. */
