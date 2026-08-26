@@ -142,8 +142,9 @@ export async function exportMessages(
   ctx: Ctx,
   since: Date,
   until: Date,
+  deadline?: number,
   onPage?: (n: number) => void
-): Promise<GhlMessageApi[]> {
+): Promise<{ messages: GhlMessageApi[]; oldestCovered: Date }> {
   const out: GhlMessageApi[] = [];
   // De-dup by id: the two passes (all-non-email + Email) are disjoint, and the
   // adaptive splitting below can re-request an overlapping range.
@@ -156,6 +157,7 @@ export async function exportMessages(
     for (const channel of EXPORT_PASSES) {
       let cursor: string | undefined;
       for (let page = 0; page < MAX_PAGES; page++) {
+        if (deadline && Date.now() >= deadline) break;
         const data = await get<{
           messages?: GhlMessageApi[];
           nextCursor?: string | null;
@@ -213,14 +215,20 @@ export async function exportMessages(
   }
 
   const floor = since.getTime();
+  let oldestCovered = until.getTime();
   let end = until.getTime();
   while (end > floor) {
+    // Time-box: stop before the serverless invocation is killed. Newest-first
+    // means what we've covered is the most recent slice; the caller records
+    // oldestCovered as a resume point and continues on the next run.
+    if (deadline && Date.now() >= deadline) break;
     const start = Math.max(floor, end - DAY_MS);
     await walk(new Date(start), new Date(end));
+    oldestCovered = start;
     end = start;
   }
 
-  return out;
+  return { messages: out, oldestCovered: new Date(oldestCovered) };
 }
 
 /**
@@ -248,13 +256,17 @@ export async function exportMessages(
  */
 export async function listConversations(
   ctx: Ctx,
-  since: Date
+  since: Date,
+  deadline?: number
 ): Promise<GhlConversationApi[]> {
   const out: GhlConversationApi[] = [];
   const seen = new Set<string>();
   let cursor = since.getTime();
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    // Time-box alongside the export; partial metadata just means some names
+    // fall back to the message stream, never a wrong metric.
+    if (deadline && Date.now() >= deadline) break;
     const data = await get<{ conversations?: GhlConversationApi[]; total?: number }>(
       ctx,
       "/conversations/search",
