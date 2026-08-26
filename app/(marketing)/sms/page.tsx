@@ -33,8 +33,8 @@ export default function SmsTermsPage() {
             SMS Terms &amp; Opt-In
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/70">
-            The terms that govern text messages from {site.name}, and how you give and withdraw
-            consent to receive them.
+            The terms that govern text messages from {site.name} (a service of {site.legalName}), and
+            how you give and withdraw consent to receive them.
           </p>
           <p className="mt-6 text-sm text-white/50">Last updated: {UPDATED}</p>
         </Container>

@@ -6,6 +6,8 @@
 export const site = {
   name: "Growth by the Numbers",
   shortName: "GBTN",
+  /** Legal entity behind the brand — used in legal notices and copyright. */
+  legalName: "Tyler M Briggs Inc",
   tagline:
     "Build a finance engine your team actually uses, and that sponsors trust.",
   domain: "growthbythenumbers.com",
