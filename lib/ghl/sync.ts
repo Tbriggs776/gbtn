@@ -105,6 +105,21 @@ export async function syncClient(
       // no rep directory; assignedUserName falls back to null below
     }
 
+    // Thread metadata: contact name/phone/email, assignment, and the inbound
+    // signal for form/ad leads (searchInbound). Fetched BEFORE the export on
+    // purpose — the export can consume the whole time budget on a busy backfill,
+    // and if this ran after it, the lead metadata (and the form/ad leads that
+    // exist ONLY here) would be starved on exactly the runs that need it most.
+    // NON-FATAL: on error, names fall back to the transcript and no metric breaks.
+    const meta = new Map<string, GhlConversationApi>();
+    try {
+      for (const c of await listConversations(ctx, since, deadline)) {
+        if (typeof c.id === "string") meta.set(c.id, c);
+      }
+    } catch {
+      // no thread metadata; baseFor derives what it can from the messages
+    }
+
     const { messages: rawMessages, oldestCovered } = await exportMessages(
       ctx,
       since,
@@ -132,20 +147,6 @@ export async function syncClient(
       const list = byConversation.get(m.conversationId) ?? [];
       list.push(m);
       byConversation.set(m.conversationId, list);
-    }
-
-    // Thread metadata: contact name/phone/email and assignment, which the
-    // message stream doesn't carry. Also NON-FATAL for the same reason — if
-    // /conversations/search errors, contact names/phones fall back to whatever
-    // the transcript carries (see baseFor); no metric is wrong, and the messages
-    // already pulled are still saved rather than thrown away.
-    const meta = new Map<string, GhlConversationApi>();
-    try {
-      for (const c of await listConversations(ctx, since, deadline)) {
-        if (typeof c.id === "string") meta.set(c.id, c);
-      }
-    } catch {
-      // no thread metadata; baseFor derives what it can from the messages
     }
 
     let savedConversations = 0;
