@@ -62,6 +62,26 @@ export async function listConnectedClientIds(): Promise<string[]> {
   return (data ?? []).map((r) => r.client_id as string);
 }
 
+/**
+ * Clients whose backfill isn't finished yet — the high-frequency sweep's work
+ * list. "Not finished" means either the resumable backfill is mid-flight
+ * (backfill_through still set) or the client has never synced at all
+ * (last_synced_at null). A client whose window is complete has a null cursor
+ * AND a sync timestamp, so it drops off this list and the sweep goes idle for
+ * it — the nightly full sync keeps it fresh from there.
+ */
+export async function listBackfillPendingClientIds(): Promise<string[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("ghl_connections")
+    .select("client_id, backfill_through, last_synced_at")
+    .neq("status", "disconnected")
+    .not("secret_ref", "is", null)
+    .or("backfill_through.not.is.null,last_synced_at.is.null");
+  if (error) throw new Error(`ghl_connections: ${error.message}`);
+  return (data ?? []).map((r) => r.client_id as string);
+}
+
 export async function storeToken(
   clientId: string,
   locationId: string,
@@ -343,7 +363,7 @@ export async function latestActivity(clientId: string): Promise<Date | null> {
  * ahead of the account's activity (nothing to show otherwise). Falls back to a
  * now-anchored window when there's no data yet.
  */
-export const REPORT_WINDOW_DAYS = 30;
+export const REPORT_WINDOW_DAYS = 90;
 
 export async function reportWindow(clientId: string): Promise<{ from: Date; to: Date }> {
   const latest = await latestActivity(clientId);
