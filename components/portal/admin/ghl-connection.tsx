@@ -47,8 +47,8 @@ export function GhlConnection({ clients }: { clients: GhlClientStatus[] }) {
       </div>
 
       <p className="mt-2 max-w-2xl text-sm text-muted">
-        Powers the Conversations tab. The token is verified before it&apos;s saved, encrypted in the
-        vault, and never shown again — paste a new one to rotate it.
+        Feeds the nightly conversation sync. The token is verified before it&apos;s saved, encrypted
+        in the vault, and never shown again — paste a new one to rotate it.
       </p>
 
       {clients.length === 0 ? (

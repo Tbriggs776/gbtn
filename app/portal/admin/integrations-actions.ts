@@ -100,8 +100,7 @@ export async function connectGhlAction(
   }
 
   revalidatePath("/portal/admin");
-  revalidatePath("/portal/conversations");
-  return { ok: true, message: "GoHighLevel connected. Run a sync from the Conversations tab." };
+  return { ok: true, message: "GoHighLevel connected. Conversations sync runs nightly." };
 }
 
 export async function testGhlAction(
@@ -151,7 +150,6 @@ export async function disconnectGhlAction(
   }
 
   revalidatePath("/portal/admin");
-  revalidatePath("/portal/conversations");
   // Synced conversations are left in place on purpose: disconnecting stops the
   // sync, it doesn't retract history the client has already been reading.
   return { ok: true, message: "Disconnected. Already-synced conversations are kept." };
