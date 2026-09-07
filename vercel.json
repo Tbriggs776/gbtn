@@ -21,18 +21,6 @@
     {
       "path": "/api/cron/callrail-sync",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/ghl-backfill",
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/cron/ghl-sync",
-      "schedule": "30 8 * * *"
-    },
-    {
-      "path": "/api/cron/ghl-daily-review",
-      "schedule": "0 15 * * *"
     }
   ]
 }
