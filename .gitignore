@@ -30,3 +30,24 @@ next-env.d.ts
 .vercel
 
 .vercel
+
+# GHL / marketing exports (client PII — never commit)
+floor-daddy-contacts*.xlsx
+floor-daddy-callrail-calls*.xlsx
+Floor Daddy - Marketing Metrics.xlsx
+Floor Daddy - Marketing Metrics.xlsm
+
+# Local API credentials for the refresh — never commit
+scripts/marketing-secrets.ps1
+
+# Claude Code — machine-local, never commit
+.claude/settings.local.json
+.claude/worktrees/
+
+# Client close profiles hold live client financials (realm ids, bank balances,
+# named vendors). This repo is PUBLIC. Only the template is shareable.
+.claude/skills/month-end-close/clients/*.md
+!.claude/skills/month-end-close/clients/_TEMPLATE.md
+
+# Apps Script carries a live GoHighLevel/CallRail token inline. Never commit.
+google-apps-script/
