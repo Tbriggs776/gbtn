@@ -1,0 +1,41 @@
+{
+  "_comment": "TEMPLATE. Copy to scripts/clients/<slug>.json (gitignored) and fill in. Real client values must never be committed \u2014 engagement terms, pricing and personnel are Client Confidential Information and this repo is PUBLIC.",
+  "client": {
+    "slug": "",
+    "name": "",
+    "legal_name": "",
+    "dba": "",
+    "entity_type": "",
+    "home_state": "",
+    "address": "",
+    "registered_agent": "",
+    "state_entity_no": "",
+    "naics": "",
+    "industry": "",
+    "status": "",
+    "source": "",
+    "onboarded_on": "",
+    "fiscal_year_end": null
+  },
+  "contacts": [],
+  "engagement": {
+    "name": "",
+    "engagement_type": "",
+    "status": "",
+    "start_date": "",
+    "initial_term_end": "",
+    "auto_renew": true,
+    "cancellation_notice_days": "",
+    "monthly_fee_cents": "",
+    "billing_day_of_month": ""
+  },
+  "phases": [],
+  "documents": {
+    "source_dir": "",
+    "files": []
+  },
+  "onboarding": {
+    "requested_on": "",
+    "categories": []
+  }
+}

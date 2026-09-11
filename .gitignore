@@ -51,3 +51,9 @@ scripts/marketing-secrets.ps1
 
 # Apps Script carries a live GoHighLevel/CallRail token inline. Never commit.
 google-apps-script/
+
+# Client seed payloads carry engagement terms, pricing and personnel data,
+# which MSA-style confidentiality clauses make Client Confidential Information.
+# This repo is PUBLIC. Only the template is shareable.
+scripts/clients/*.json
+!scripts/clients/_TEMPLATE.json
