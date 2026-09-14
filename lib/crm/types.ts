@@ -1,6 +1,6 @@
 // Shared CRM types, mirroring supabase/migrations/0020_crm.sql + 0021_crm_contact_ltv.sql
 // + 0022_crm_email_marketing.sql + 0023_crm_journeys.sql + 0024_crm_cases.sql.
-// The CRM is GBTN-internal (platform admin only); there is no client_id here.
+// The CRM (Acquire) is GBTN-internal (GBTN staff only); there is no client_id here.
 
 /** Discriminated result returned by every CRM server action. */
 export type ActionResult<T = undefined> =

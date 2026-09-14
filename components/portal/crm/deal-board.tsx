@@ -388,7 +388,7 @@ function CreateEngagementModal({
       <div className="flex flex-col gap-3">
         <p className="text-sm text-muted">
           Convert <span className="font-semibold text-ink">{deal?.title}</span> into a client
-          engagement on the Advantage ladder.
+          engagement on the Advantage OS ladder (Engage).
         </p>
         <Field label="Ladder rung">
           <Select value={rung} onChange={(e) => setRung(e.target.value as OfferRung)}>

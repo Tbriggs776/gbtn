@@ -1,5 +1,11 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  engagementBucket,
+  isDraftEngagementStatus,
+  normalizeStatus,
+  toOfferRung,
+} from "@/lib/engagements/portal-model";
 import { OFFER_RUNGS, RUNG_LABEL, type OfferRung } from "./types";
 
 export type { OfferRung };
@@ -147,4 +153,28 @@ export async function createEngagementForDeal(
     .single();
   if (error || !data) throw new Error(`Failed to create engagement: ${error?.message}`);
   return { id: data.id as string, clientId };
+}
+
+export type EngagementRungCounts = Record<OfferRung | "unset", number> & { total: number };
+
+/**
+ * Open engagements by ladder rung, for the CRM home. Uses the same vocabulary as
+ * the portal home: terminal statuses and drafts are skipped. Selects offer_rung
+ * and status only — no names, fees or client ids. Null on any error (including
+ * a missing 0030 column); never throws, since there is no error.tsx.
+ */
+export async function getOpenEngagementRungCounts(db: SupabaseClient): Promise<EngagementRungCounts | null> {
+  const { data, error } = await db.from("engagements").select("offer_rung, status").limit(1000);
+  if (error) {
+    console.error("[crm-home]", "engagement-rungs", error.code ?? "no-code", error.message);
+    return null;
+  }
+  const out: EngagementRungCounts = { diagnose: 0, install: 0, institutionalize: 0, unset: 0, total: 0 };
+  for (const r of Array.isArray(data) ? data : []) {
+    const status = normalizeStatus(r.status);
+    if (engagementBucket(status) === "terminal" || isDraftEngagementStatus(status)) continue;
+    out[toOfferRung(r.offer_rung) ?? "unset"]++;
+    out.total++;
+  }
+  return out;
 }

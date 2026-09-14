@@ -33,6 +33,8 @@ export function CadenceSection({
   documentsHref: string | null;
 }) {
   const { current } = cadence;
+  // Staff see the Advantage OS module; clients keep the plain label.
+  const eyebrow = showStaffDetail ? "Run · Cadence" : "Cadence · Now and next";
   const aside = current ? (
     <span className="text-xs text-muted-soft">
       Phase {current.ordinal} of {cadence.phaseCount}
@@ -42,7 +44,7 @@ export function CadenceSection({
   // Nothing at all to show: one calm note, never a stack of empty cards.
   if (cadence.phaseCount === 0 && !cadence.phasesFailed && cadence.onboarding === null) {
     return (
-      <HomeSection id="home-cadence" eyebrow="Cadence · Now and next">
+      <HomeSection id="home-cadence" eyebrow={eyebrow}>
         <SoftNote title={EMPTY_TITLE} body={showStaffDetail ? EMPTY_STAFF_BODY : EMPTY_CLIENT_BODY} />
       </HomeSection>
     );
@@ -65,7 +67,7 @@ export function CadenceSection({
   }
 
   return (
-    <HomeSection id="home-cadence" eyebrow="Cadence · Now and next" aside={aside}>
+    <HomeSection id="home-cadence" eyebrow={eyebrow} aside={aside}>
       <div className={`grid gap-4 ${COLS[cards.length] ?? ""}`}>{cards}</div>
     </HomeSection>
   );

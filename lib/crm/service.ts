@@ -423,6 +423,8 @@ export type CrmDashboard = {
   contactsTotal: number;
   contactsByStage: Record<string, number>;
   openDeals: number;
+  /** Open deal counts keyed by stage_id (deals with no stage are not keyed). */
+  openDealsByStage: Record<string, number>;
   pipelineValue: number;
   weightedPipeline: number;
   wonThisMonth: number;
@@ -469,10 +471,12 @@ export async function getDashboard(db: DB): Promise<CrmDashboard> {
   const probByStage = new Map(stages.map((s) => [s.id, Number(s.probability)]));
   let pipelineValue = 0;
   let weighted = 0;
+  const openByStage: Record<string, number> = {};
   for (const d of (openDealsRes.data as { value: number; stage_id: string | null }[]) ?? []) {
     const v = Number(d.value) || 0;
     pipelineValue += v;
     weighted += v * (d.stage_id ? probByStage.get(d.stage_id) ?? 0 : 0);
+    if (d.stage_id) openByStage[d.stage_id] = (openByStage[d.stage_id] ?? 0) + 1;
   }
 
   const wonValue = ((wonRes.data as { value: number }[]) ?? []).reduce(
@@ -489,6 +493,7 @@ export async function getDashboard(db: DB): Promise<CrmDashboard> {
     contactsTotal: contactsRes.count ?? 0,
     contactsByStage: byStage,
     openDeals: (openDealsRes.data ?? []).length,
+    openDealsByStage: openByStage,
     pipelineValue,
     weightedPipeline: weighted,
     wonThisMonth: (wonRes.data ?? []).length,
