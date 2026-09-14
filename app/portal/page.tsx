@@ -6,6 +6,17 @@ import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui
 import { buildPeriods } from "@/lib/financials/build";
 import { aggregatePL, money, percent, ratio } from "@/lib/financials/metrics";
 import { analyze } from "@/lib/financials/analysis";
+import { canSeeNav, NAV_CAPABILITY, visibleDocumentCategories } from "@/lib/permissions";
+import { loadPortalHomeEngagement } from "@/lib/engagements/portal";
+import {
+  arizonaToday,
+  EMPTY_HOME_ENGAGEMENT,
+  type PortalHomeEngagement,
+} from "@/lib/engagements/portal-model";
+import { HomeSection, SoftNote } from "@/components/portal/home/section";
+import { EngagementStrip } from "@/components/portal/home/engagement-strip";
+import { CadenceSection } from "@/components/portal/home/cadence";
+import { ProveRail, type ProveItem } from "@/components/portal/home/prove-rail";
 import type { ReactNode } from "react";
 
 // ── Small presentational helpers (server components) ─────────────────────────
@@ -145,13 +156,31 @@ export default async function PortalHome({
   // guard — make the omission deliberate so a future switch to the service
   // role (the house pattern elsewhere) can't quietly start printing the P&L to
   // ops and marketing.
+  // The engagement loader reads through its own RLS client with explicit
+  // client_id filters; moving it to the service role requires a gate first.
   const canSeeFinancials = session ? sessionCan(session, activeClient.id, "financials") : false;
-  const [{ count: docCount }, { data: uploads }, { data: items }] =
+  const canSeeDocuments = session ? sessionCan(session, activeClient.id, "documents") : false;
+  const canViewWorkspace = session
+    ? canSeeNav("overview", session.roles[activeClient.id] ?? null, session.isAdmin)
+    : false;
+  const showStaffDetail = Boolean(session?.isAdmin);
+  const today = arizonaToday();
+
+  // The Prove rail's document count must match the Documents page, which hides
+  // Financials-category files from roles without the financials capability.
+  const docCats = visibleDocumentCategories(
+    session ? session.roles[activeClient.id] : null,
+    Boolean(session?.isAdmin)
+  );
+  let docCountQuery = supabase
+    .from("documents")
+    .select("*", { count: "exact", head: true })
+    .eq("client_id", activeClient.id);
+  if (!docCats.all) docCountQuery = docCountQuery.not("category", "in", `(${docCats.hidden.join(",")})`);
+
+  const [{ count: docCount }, { data: uploads }, { data: items }, engagementHome] =
     await Promise.all([
-      supabase
-        .from("documents")
-        .select("*", { count: "exact", head: true })
-        .eq("client_id", activeClient.id),
+      canSeeDocuments ? docCountQuery : Promise.resolve({ count: null as number | null }),
       canSeeFinancials
         ? supabase
             .from("financial_uploads")
@@ -165,6 +194,11 @@ export default async function PortalHome({
             .select("statement_type, category, amount, upload_id")
             .eq("client_id", activeClient.id)
         : Promise.resolve({ data: [] as { statement_type: string; category: string; amount: number; upload_id: string }[] }),
+      canViewWorkspace
+        ? loadPortalHomeEngagement(activeClient.id, { today, viewerIsAdmin: showStaffDetail }).catch(
+            (): PortalHomeEngagement => ({ state: "unavailable", code: null })
+          )
+        : Promise.resolve<PortalHomeEngagement>(EMPTY_HOME_ENGAGEMENT),
     ]);
 
   const uploadLabel = new Map(
@@ -228,200 +262,218 @@ export default async function PortalHome({
   const docHref = `/portal/documents?client=${activeClient.id}`;
   const vsPrev = prev ? `vs ${prev.label}` : undefined;
 
+  // Prove: one card per surface this viewer can actually open. Each uses the
+  // capability its target page passes to requireCapability, so none bounces.
+  const clientId = activeClient.id;
+  const q = `?client=${clientId}`;
+  const canOpen = (key: ProveItem["key"]): boolean => {
+    if (!session) return false;
+    const cap = NAV_CAPABILITY[key];
+    return cap === null || sessionCan(session, clientId, cap);
+  };
+  const proveItems: ProveItem[] = [];
+  if (canOpen("financials")) {
+    proveItems.push({
+      key: "financials",
+      href: `/portal/financials${q}`,
+      title: "Financials",
+      ...(hasData
+        ? { stat: String(periods.length), statLabel: periods.length === 1 ? "month tracked" : "months tracked" }
+        : {}),
+      body: hasData
+        ? "Monthly P&L, balance sheet and your top areas for improvement."
+        : "Your dashboards appear once month-end numbers are loaded.",
+    });
+  }
+  if (canOpen("documents")) {
+    proveItems.push({
+      key: "documents",
+      href: `/portal/documents${q}`,
+      title: "Documents",
+      stat: String(docCount ?? 0),
+      statLabel: docCount === 1 ? "file shared" : "files shared",
+      body: "Securely exchange statements, contracts, and reports.",
+    });
+  }
+  if (canOpen("briefing")) {
+    proveItems.push({
+      key: "briefing",
+      href: `/portal/briefing${q}`,
+      title: "CFO Briefing",
+      body: "Operations and financials, joined.",
+    });
+  }
+  if (canOpen("fpa")) {
+    proveItems.push({
+      key: "fpa",
+      href: `/portal/fpa${q}`,
+      title: "FP&A",
+      body: "Overhead and cost trends, month over month.",
+    });
+  }
+
+  const subtitle = canSeeFinancials
+    ? hasData
+      ? `${activeClient.name} · operating snapshot through ${latest.label}`
+      : `${activeClient.name} · your operating snapshot`
+    : `${activeClient.name} · engagement, cadence and documents`;
+
   return (
     <PortalShell>
-      <PortalHeader
-        title={`Hi ${firstName}`}
-        subtitle={
-          hasData
-            ? `${activeClient.name} · snapshot through ${latest.label}`
-            : `${activeClient.name} · your financial command center`
-        }
-      />
+      <PortalHeader title={`Hi ${firstName}`} subtitle={subtitle} />
 
-      {hasData ? (
-        <div className="mt-8 space-y-8">
-          {/* This month at a glance */}
-          <section>
-            <div className="mb-3 flex items-baseline justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-soft">
-                This month · {latest.label}
-              </h2>
-              <Link href={finHref} className="text-xs font-semibold text-brand-700 hover:underline">
-                Full dashboard →
-              </Link>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {pl && (
+      <div className="mt-8 space-y-8">
+        {/* Engage */}
+        <EngagementStrip
+          data={engagementHome}
+          showStaffDetail={showStaffDetail}
+          clientName={activeClient.name}
+        />
+
+        {/* Run — financials capability only */}
+        {canSeeFinancials ? (
+          hasData ? (
+            <HomeSection
+              id="home-run"
+              eyebrow="Operating snapshot"
+              aside={
                 <>
-                  <StatCard
-                    label="Revenue"
-                    value={money(pl.revenue)}
-                    delta={<DeltaBadge value={revDelta} unit="%" />}
-                    sub={vsPrev}
-                  />
-                  <StatCard
-                    label="Gross Margin"
-                    value={percent(pl.grossMargin)}
-                    delta={<DeltaBadge value={gmDelta} unit="pts" />}
-                    sub={`Gross profit ${money(pl.grossProfit)}`}
-                  />
-                  <StatCard
-                    label="EBITDA Margin"
-                    value={percent(pl.ebitdaMargin)}
-                    delta={<DeltaBadge value={emDelta} unit="pts" />}
-                    sub={`EBITDA ${money(pl.ebitda)}`}
-                  />
+                  <span className="text-xs text-muted-soft">This month · {latest.label}</span>
+                  <Link href={finHref} className="text-xs font-semibold text-brand-700 hover:underline">
+                    Full dashboard →
+                  </Link>
                 </>
-              )}
-              {bs ? (
-                <StatCard
-                  label="Cash"
-                  value={money(bs.cash)}
-                  delta={<DeltaBadge value={cashDelta} unit="$" />}
-                  sub={`Current ratio ${ratio(bs.currentRatio)}`}
-                />
-              ) : (
-                pl && (
-                  <StatCard
-                    label="Net Income"
-                    value={money(pl.netIncome)}
-                    sub={vsPrev}
-                  />
-                )
-              )}
-            </div>
-          </section>
+              }
+            >
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {pl && (
+                    <>
+                      <StatCard
+                        label="Revenue"
+                        value={money(pl.revenue)}
+                        delta={<DeltaBadge value={revDelta} unit="%" />}
+                        sub={vsPrev}
+                      />
+                      <StatCard
+                        label="Gross Margin"
+                        value={percent(pl.grossMargin)}
+                        delta={<DeltaBadge value={gmDelta} unit="pts" />}
+                        sub={`Gross profit ${money(pl.grossProfit)}`}
+                      />
+                      <StatCard
+                        label="EBITDA Margin"
+                        value={percent(pl.ebitdaMargin)}
+                        delta={<DeltaBadge value={emDelta} unit="pts" />}
+                        sub={`EBITDA ${money(pl.ebitda)}`}
+                      />
+                    </>
+                  )}
+                  {bs ? (
+                    <StatCard
+                      label="Cash"
+                      value={money(bs.cash)}
+                      delta={<DeltaBadge value={cashDelta} unit="$" />}
+                      sub={`Current ratio ${ratio(bs.currentRatio)}`}
+                    />
+                  ) : (
+                    pl && (
+                      <StatCard
+                        label="Net Income"
+                        value={money(pl.netIncome)}
+                        sub={vsPrev}
+                      />
+                    )
+                  )}
+                </div>
 
-          {/* Trend + YTD */}
-          <section className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-line bg-white p-6 ring-soft lg:col-span-2">
-              <div className="flex items-baseline justify-between">
-                <h3 className="text-sm font-bold text-ink">Revenue trend</h3>
-                <span className="text-xs text-muted-soft">
-                  {periods[0].label} – {latest.label}
-                </span>
+                {/* Trend + YTD */}
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-line bg-white p-6 ring-soft lg:col-span-2">
+                    <div className="flex items-baseline justify-between">
+                      <h3 className="text-sm font-bold text-ink">Revenue trend</h3>
+                      <span className="text-xs text-muted-soft">
+                        {periods[0].label} – {latest.label}
+                      </span>
+                    </div>
+                    <div className="mt-4">
+                      <Sparkline values={periods.map((p) => p.pl?.revenue ?? 0)} />
+                    </div>
+                    {ytd && (
+                      <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-line pt-4">
+                        <div>
+                          <dt className="text-xs text-muted-soft">YTD revenue</dt>
+                          <dd className="mt-0.5 text-lg font-bold text-ink">{money(ytd.revenue)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-soft">YTD gross margin</dt>
+                          <dd className="mt-0.5 text-lg font-bold text-ink">{percent(ytd.grossMargin)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-soft">YTD EBITDA</dt>
+                          <dd className="mt-0.5 text-lg font-bold text-ink">{money(ytd.ebitda)}</dd>
+                        </div>
+                      </dl>
+                    )}
+                  </div>
+
+                  {/* Top focus area */}
+                  <div className="rounded-2xl border border-line bg-white p-6 ring-soft">
+                    <h3 className="text-sm font-bold text-ink">Where to focus</h3>
+                    {focus.length === 0 ? (
+                      <p className="mt-3 text-sm text-muted">
+                        Nothing flagged against our benchmarks — the numbers look healthy.
+                      </p>
+                    ) : (
+                      <ul className="mt-3 space-y-3">
+                        {focus.map((f) => (
+                          <li key={f.id} className="flex items-start gap-2.5">
+                            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEV_DOT[f.severity]}`} />
+                            <div>
+                              <p className="text-sm font-semibold text-ink">{f.title}</p>
+                              <p className="text-xs text-muted">
+                                {f.current} <span className="text-muted-soft">vs {f.target}</span>
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <Link href={finHref} className="mt-4 inline-block text-xs font-semibold text-brand-700 hover:underline">
+                      See the full breakdown →
+                    </Link>
+                  </div>
+                </div>
               </div>
-              <div className="mt-4">
-                <Sparkline values={periods.map((p) => p.pl?.revenue ?? 0)} />
-              </div>
-              {ytd && (
-                <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-line pt-4">
-                  <div>
-                    <dt className="text-xs text-muted-soft">YTD revenue</dt>
-                    <dd className="mt-0.5 text-lg font-bold text-ink">{money(ytd.revenue)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-soft">YTD gross margin</dt>
-                    <dd className="mt-0.5 text-lg font-bold text-ink">{percent(ytd.grossMargin)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-soft">YTD EBITDA</dt>
-                    <dd className="mt-0.5 text-lg font-bold text-ink">{money(ytd.ebitda)}</dd>
-                  </div>
-                </dl>
-              )}
-            </div>
+            </HomeSection>
+          ) : (
+            <HomeSection id="home-run" eyebrow="Operating snapshot">
+              <SoftNote
+                title="No month-end numbers loaded yet"
+                body={
+                  showStaffDetail
+                    ? "Load the month-end (MRP) workbook on the Financials tab to build the snapshot."
+                    : "This month, the revenue trend, year to date and where to focus will appear here once your month-end numbers are loaded."
+                }
+                action={{ href: finHref, label: "Go to Financials →" }}
+              />
+            </HomeSection>
+          )
+        ) : null}
 
-            {/* Top focus area */}
-            <div className="rounded-2xl border border-line bg-white p-6 ring-soft">
-              <h3 className="text-sm font-bold text-ink">Where to focus</h3>
-              {focus.length === 0 ? (
-                <p className="mt-3 text-sm text-muted">
-                  Nothing flagged against our benchmarks — the numbers look healthy.
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-3">
-                  {focus.map((f) => (
-                    <li key={f.id} className="flex items-start gap-2.5">
-                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEV_DOT[f.severity]}`} />
-                      <div>
-                        <p className="text-sm font-semibold text-ink">{f.title}</p>
-                        <p className="text-xs text-muted">
-                          {f.current} <span className="text-muted-soft">vs {f.target}</span>
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link href={finHref} className="mt-4 inline-block text-xs font-semibold text-brand-700 hover:underline">
-                See the full breakdown →
-              </Link>
-            </div>
-          </section>
-
-          {/* Quick links */}
-          <section className="grid gap-4 sm:grid-cols-2">
-            <QuickLink
-              href={docHref}
-              title="Documents"
-              stat={`${docCount ?? 0}`}
-              label={docCount === 1 ? "file shared" : "files shared"}
-              body="Securely exchange statements, contracts, and reports."
-            />
-            <QuickLink
-              href={finHref}
-              title="Financials"
-              stat={`${periods.length}`}
-              label={periods.length === 1 ? "month tracked" : "months tracked"}
-              body="Dashboards, date ranges, and your top areas for improvement."
-            />
-          </section>
-        </div>
-      ) : (
-        <div className="mt-8 grid gap-5 sm:grid-cols-2">
-          <QuickLink
-            href={docHref}
-            title="Documents"
-            stat={`${docCount ?? 0}`}
-            label={docCount === 1 ? "file shared" : "files shared"}
-            body="Securely exchange statements, contracts, and reports."
+        {/* Cadence — only when an engagement loaded */}
+        {engagementHome.state === "ready" ? (
+          <CadenceSection
+            cadence={engagementHome.cadence}
+            showStaffDetail={showStaffDetail}
+            showOnboardingItems={canSeeFinancials}
+            documentsHref={canSeeFinancials && canSeeDocuments ? docHref : null}
           />
-          <QuickLink
-            href={finHref}
-            title="Financials"
-            stat="0"
-            label="months tracked"
-            body="Your dashboards will appear here once your month-end numbers are loaded."
-          />
-        </div>
-      )}
-    </PortalShell>
-  );
-}
+        ) : null}
 
-function QuickLink({
-  href,
-  title,
-  stat,
-  label,
-  body,
-}: {
-  href: string;
-  title: string;
-  stat: string;
-  label: string;
-  body: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group rounded-2xl border border-line bg-white p-6 ring-soft transition-all hover:-translate-y-0.5 hover:ring-card"
-    >
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-soft">
-          {title}
-        </h3>
-        <span className="text-brand-600 transition-transform group-hover:translate-x-0.5">
-          →
-        </span>
+        {/* Prove */}
+        <ProveRail items={proveItems} />
       </div>
-      <p className="mt-3 text-3xl font-bold tracking-tight text-ink">
-        <span className="text-gradient">{stat}</span>{" "}
-        <span className="text-base font-medium text-muted">{label}</span>
-      </p>
-      <p className="mt-2 text-sm text-muted">{body}</p>
-    </Link>
+    </PortalShell>
   );
 }
