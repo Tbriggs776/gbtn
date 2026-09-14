@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Oswald, Spectral } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
+import { SiteAnalytics } from "@/components/analytics";
 import "./globals.css";
 import { site } from "@/lib/site";
 
@@ -66,7 +66,7 @@ export default function RootLayout({
     <html lang="en" className={`${oswald.variable} ${spectral.variable}`}>
       <body className="min-h-screen antialiased">
         {children}
-        <Analytics />
+        <SiteAnalytics />
       </body>
     </html>
   );
