@@ -100,6 +100,16 @@ export type DealStatus = (typeof DEAL_STATUSES)[number];
 export const VALUE_TYPES = ["one_time", "monthly", "annual"] as const;
 export type ValueType = (typeof VALUE_TYPES)[number];
 
+// Advantage OS offer ladder. Shared here (client-safe) so the deal board and the
+// server-only engagement service agree on the rung values and labels.
+export const OFFER_RUNGS = ["diagnose", "install", "institutionalize"] as const;
+export type OfferRung = (typeof OFFER_RUNGS)[number];
+export const RUNG_LABEL: Record<OfferRung, string> = {
+  diagnose: "Diagnose",
+  install: "Install",
+  institutionalize: "Institutionalize",
+};
+
 export type CrmDeal = {
   id: string;
   title: string;

@@ -5,28 +5,35 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Button, ErrorText, Field, Modal, Select, TextArea, TextInput } from "./ui";
 import { createDeal, moveDealStage } from "@/lib/crm/actions";
+import { createEngagementAction } from "@/lib/crm/engagement-actions";
 import { formatCurrency } from "@/lib/format";
-import type { CrmDealJoined, CrmStage } from "@/lib/crm/types";
-import { contactName } from "@/lib/crm/types";
+import type { CrmDealJoined, CrmStage, OfferRung } from "@/lib/crm/types";
+import { contactName, OFFER_RUNGS, RUNG_LABEL } from "@/lib/crm/types";
 
 type Opt = { id: string; name: string };
+type DealEngagement = { rung: OfferRung | null; name: string };
 
 export function DealBoard({
   stages,
   deals,
   contacts,
   companies,
+  engagementsByDeal,
+  clients,
 }: {
   stages: CrmStage[];
   deals: CrmDealJoined[];
   contacts: { id: string; first_name: string | null; last_name: string | null; email: string | null }[];
   companies: Opt[];
+  engagementsByDeal: Record<string, DealEngagement>;
+  clients: Opt[];
 }) {
   const router = useRouter();
   const [, start] = useTransition();
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [engageDeal, setEngageDeal] = useState<CrmDealJoined | null>(null);
   const [localDeals, setLocalDeals] = useState(deals);
   const [lostMove, setLostMove] = useState<{ dealId: string; stageId: string; stageName: string } | null>(null);
   const [lostReason, setLostReason] = useState("");
@@ -129,6 +136,24 @@ export function DealBoard({
                       </Link>
                     ) : null}
                   </div>
+                  <div className="mt-2 border-t border-line/60 pt-2">
+                    {engagementsByDeal[d.id] ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-700">
+                        Engagement
+                        {engagementsByDeal[d.id].rung
+                          ? ` · ${RUNG_LABEL[engagementsByDeal[d.id].rung as OfferRung]}`
+                          : ""}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEngageDeal(d)}
+                        className="text-[11px] font-semibold text-brand-700 hover:underline"
+                      >
+                        + Create engagement
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
               {byStage(s.id).length === 0 ? (
@@ -145,6 +170,12 @@ export function DealBoard({
         stages={stages}
         contacts={contacts}
         companies={companies}
+      />
+
+      <CreateEngagementModal
+        deal={engageDeal}
+        clients={clients}
+        onClose={() => setEngageDeal(null)}
       />
 
       <Modal
@@ -293,6 +324,107 @@ function NewDealModal({
           </Button>
           <Button onClick={submit} disabled={pending || !form.title.trim()}>
             {pending ? "Saving…" : "Create deal"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// Advantage OS: convert a deal into a client engagement on the offer ladder.
+// Staff pick a rung and either link an existing client or create a new one from
+// the deal. The write goes through createEngagementAction (assertStaff +
+// service role); this component only collects input.
+function CreateEngagementModal({
+  deal,
+  clients,
+  onClose,
+}: {
+  deal: CrmDealJoined | null;
+  clients: Opt[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState("");
+  const [rung, setRung] = useState<OfferRung>("diagnose");
+  const [clientId, setClientId] = useState("");
+  const [newName, setNewName] = useState("");
+
+  // Reset the form each time a different deal opens the modal.
+  useEffect(() => {
+    if (!deal) return;
+    setError("");
+    setRung("diagnose");
+    setClientId(clients.length > 0 ? clients[0].id : "__new__");
+    setNewName(deal.company?.name ?? deal.title ?? "");
+  }, [deal, clients]);
+
+  const creatingNew = clientId === "__new__";
+
+  function submit() {
+    if (!deal) return;
+    if (creatingNew && !newName.trim()) {
+      setError("Enter a name for the new client.");
+      return;
+    }
+    setError("");
+    start(async () => {
+      const res = await createEngagementAction({
+        dealId: deal.id,
+        offerRung: rung,
+        clientId: creatingNew ? undefined : clientId,
+        newClientName: creatingNew ? newName.trim() : undefined,
+        dealTitle: deal.title,
+      });
+      if (!res.ok) return setError(res.error);
+      onClose();
+      router.refresh();
+    });
+  }
+
+  return (
+    <Modal open={!!deal} onClose={onClose} title="Create engagement">
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted">
+          Convert <span className="font-semibold text-ink">{deal?.title}</span> into a client
+          engagement on the Advantage ladder.
+        </p>
+        <Field label="Ladder rung">
+          <Select value={rung} onChange={(e) => setRung(e.target.value as OfferRung)}>
+            {OFFER_RUNGS.map((r) => (
+              <option key={r} value={r}>
+                {RUNG_LABEL[r]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Client">
+          <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            <option value="__new__">＋ New client from this deal</option>
+          </Select>
+        </Field>
+        {creatingNew ? (
+          <Field label="New client name">
+            <TextInput
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Company name"
+            />
+          </Field>
+        ) : null}
+        <ErrorText>{error}</ErrorText>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={pending}>
+            {pending ? "Creating…" : "Create engagement"}
           </Button>
         </div>
       </div>
