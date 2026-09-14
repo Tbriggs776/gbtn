@@ -317,6 +317,8 @@ export default async function PortalHome({
       ? `${activeClient.name} · operating snapshot through ${latest.label}`
       : `${activeClient.name} · your operating snapshot`
     : `${activeClient.name} · engagement, cadence and documents`;
+  // Staff see the Advantage OS module names (Engage / Run / Prove); clients keep plain labels.
+  const runEyebrow = showStaffDetail ? "Run · Operating snapshot" : "Operating snapshot";
 
   return (
     <PortalShell>
@@ -327,6 +329,7 @@ export default async function PortalHome({
         <EngagementStrip
           data={engagementHome}
           showStaffDetail={showStaffDetail}
+          clientId={activeClient.id}
           clientName={activeClient.name}
         />
 
@@ -335,7 +338,7 @@ export default async function PortalHome({
           hasData ? (
             <HomeSection
               id="home-run"
-              eyebrow="Operating snapshot"
+              eyebrow={runEyebrow}
               aside={
                 <>
                   <span className="text-xs text-muted-soft">This month · {latest.label}</span>
@@ -447,7 +450,7 @@ export default async function PortalHome({
               </div>
             </HomeSection>
           ) : (
-            <HomeSection id="home-run" eyebrow="Operating snapshot">
+            <HomeSection id="home-run" eyebrow={runEyebrow}>
               <SoftNote
                 title="No month-end numbers loaded yet"
                 body={

@@ -144,7 +144,7 @@ export default async function AdminPage() {
           <section className="rounded-2xl border border-line bg-white p-6 ring-soft">
             <h2 className="text-base font-bold text-ink">Add a GBTN team member</h2>
             <p className="mt-1 mb-5 text-sm text-muted">
-              Employees get the CRM only; admins get everything. They sign in at{" "}
+              Employees get Acquire (the CRM) only; admins get everything. They sign in at{" "}
               <span className="font-mono">/team</span>.
             </p>
             <InviteStaffForm />

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { requireStaff } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "CRM · GBTN",
+  title: "Acquire · GBTN",
   robots: { index: false, follow: false },
 };
 

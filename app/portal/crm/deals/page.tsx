@@ -19,8 +19,9 @@ export default async function DealsPage() {
 
   // Engagements + client list drive the Advantage OS convert widget. Read via
   // the service role: this page is already staff-gated by app/portal/crm/layout
-  // (requireStaff), and neither `engagements` nor `clients` has a staff-scoped
-  // RLS select policy — an RLS read here would come back empty.
+  // (requireStaff), and `clients` has no select policy an employee passes, so an
+  // RLS read would come back empty for employees. (`engagements` is readable to
+  // staff through engagements_staff_write.)
   const admin = createAdminClient();
   const [engagementsMap, clients] = await Promise.all([
     getEngagementsByDeal(admin, deals.map((d) => d.id)),
@@ -38,7 +39,7 @@ export default async function DealsPage() {
     <PortalShell wide>
       <PortalHeader
         title="Deals"
-        subtitle={`${open.length} open · ${formatCurrency(pipeline)} in pipeline. Drag cards to advance stages.`}
+        subtitle={`${open.length} open · ${formatCurrency(pipeline)} in pipeline. Drag cards to advance stages; convert a won deal to engage.`}
       />
       <CrmNav />
       <DealBoard

@@ -94,6 +94,11 @@ const ENG_CLOSED_OTHER = new Set([
 /** Never ranked as primary for anyone; admins see a count instead. */
 const ENG_DRAFTS = new Set(["draft", "proposed"]);
 
+/** Draft engagements are hidden from the portal home, so staff counts skip them too. */
+export function isDraftEngagementStatus(status: string): boolean {
+  return ENG_DRAFTS.has(status);
+}
+
 export function engagementBucket(status: string): EngagementBucket {
   if (ENG_COMPLETED.has(status) || ENG_CLOSED_OTHER.has(status)) return "terminal";
   if (ENG_LIVE.has(status)) return "live";
@@ -403,6 +408,8 @@ export type PortalEngagement = {
   termDay: { day: number; of: number } | null;
   /** Null unless the viewer is a platform admin — the only place raw values live. */
   staff: {
+    /** Converted from a CRM deal: the client-visible name follows the rung. */
+    fromDeal: boolean;
     internalName: string | null;
     rawStatus: string | null;
     rawType: string | null;
@@ -471,6 +478,7 @@ export function toPortalEngagement(row: EngagementRow, today: string, viewer: { 
         : null,
     staff: viewer.isAdmin
       ? {
+          fromDeal: row.fromDeal,
           internalName: row.fromDeal && row.name !== name ? row.name : null,
           rawStatus: ENG_STATUS_LABEL.has(row.status) ? null : row.status || "(not set)",
           rawType:

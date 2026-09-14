@@ -100,7 +100,7 @@ export function InviteStaffForm() {
           Access level
         </label>
         <select id="staffRole" name="role" className={fieldClass} defaultValue="employee">
-          <option value="employee">Employee — CRM only (no client data or admin)</option>
+          <option value="employee">Employee — Acquire (CRM) only (no client data or admin)</option>
           <option value="admin">Admin — full access, incl. clients &amp; user management</option>
         </select>
       </div>

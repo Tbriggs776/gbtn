@@ -38,7 +38,7 @@ export default async function TeamLoginPage({
             </span>
             <h1 className="mt-5 text-2xl font-bold tracking-tight text-ink">Team Workspace</h1>
             <p className="mt-2 text-sm text-muted">
-              GBTN staff sign-in for the CRM and internal tools.
+              GBTN staff sign-in for Acquire (the CRM) and internal tools.
             </p>
           </div>
 

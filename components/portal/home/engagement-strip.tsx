@@ -1,5 +1,6 @@
 import { OFFER_RUNGS, RUNG_LABEL, type OfferRung } from "@/lib/crm/types";
 import type { PortalHomeEngagement } from "@/lib/engagements/portal-model";
+import { RungEditor } from "./rung-editor";
 import { HomeSection, Pill, SoftNote, StaffNote } from "./section";
 
 // Engage: the active engagement and where it sits on the Advantage OS ladder.
@@ -42,15 +43,18 @@ function plural(n: number, one: string, many: string): string {
 export function EngagementStrip({
   data,
   showStaffDetail,
+  clientId,
   clientName,
 }: {
   data: PortalHomeEngagement;
   showStaffDetail: boolean;
+  /** The resolved active client (never the raw ?client= param). */
+  clientId: string;
   clientName: string;
 }) {
   return (
-    <HomeSection id="home-engagement" eyebrow="Engagement">
-      <EngagementBody data={data} showStaffDetail={showStaffDetail} clientName={clientName} />
+    <HomeSection id="home-engagement" eyebrow={showStaffDetail ? "Engage · Engagement" : "Engagement"}>
+      <EngagementBody data={data} showStaffDetail={showStaffDetail} clientId={clientId} clientName={clientName} />
     </HomeSection>
   );
 }
@@ -58,10 +62,12 @@ export function EngagementStrip({
 function EngagementBody({
   data,
   showStaffDetail,
+  clientId,
   clientName,
 }: {
   data: PortalHomeEngagement;
   showStaffDetail: boolean;
+  clientId: string;
   clientName: string;
 }) {
   if (data.state === "unavailable") {
@@ -93,13 +99,13 @@ function EngagementBody({
         title={completed ? "No active engagement" : "No active engagement yet"}
         body={
           showStaffDetail
-            ? `No open engagement for ${clientName}. Engagements are created from a won deal on the CRM deal board.`
+            ? `No open engagement for ${clientName}. Engagements are created from a won deal in Acquire → Deals.`
             : completed
               ? "Your previous engagement is complete. Anything new we start together will show here."
               : "When your GBTN engagement is set up, where it sits on the ladder, its timeline and what's happening now will show here."
         }
         detail={staffLines.length > 0 ? staffLines.map((l) => <p key={l}>{l}</p>) : undefined}
-        action={showStaffDetail ? { href: "/portal/crm/deals", label: "Open the deal board →" } : null}
+        action={showStaffDetail ? { href: "/portal/crm/deals", label: "Open Deals in Acquire →" } : null}
       />
     );
   }
@@ -129,7 +135,7 @@ function EngagementBody({
           ) : null}
           {staff?.internalName ? (
             <StaffNote>
-              Internal name (from CRM deal): &ldquo;{staff.internalName}&rdquo;. Client users see the heading above.
+              Internal name (deal title in Acquire): &ldquo;{staff.internalName}&rdquo;. Client users see the heading above.
             </StaffNote>
           ) : null}
           {staff?.rawStatus ? (
@@ -159,12 +165,21 @@ function EngagementBody({
               Rung unset
             </span>
           )}
-          {!e.rung && showStaffDetail ? (
-            <StaffNote>
-              {data.rungColumnMissing
-                ? "The offer_rung column is missing (0030)."
-                : "offer_rung is null on this engagement. There's no rung editor yet, so set it on the row."}
-            </StaffNote>
+          {showStaffDetail && data.rungColumnMissing ? (
+            <StaffNote>The offer_rung column is missing (0030), so the rung can&apos;t be set here.</StaffNote>
+          ) : null}
+          {showStaffDetail && !data.rungColumnMissing ? (
+            <RungEditor
+              // A client switch is a search-param navigation that keeps this
+              // component mounted; the key resets its local state per tenant.
+              key={`${clientId}:${e.id}`}
+              engagementId={e.id}
+              clientId={clientId}
+              rung={e.rung}
+              phaseCount={data.cadence.phaseCount}
+              phasesFailed={data.cadence.phasesFailed}
+              nameFollowsRung={Boolean(staff?.fromDeal)}
+            />
           ) : null}
         </div>
       </div>

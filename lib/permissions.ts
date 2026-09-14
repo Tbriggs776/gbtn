@@ -95,9 +95,10 @@ export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
   opsReports: "ops",
   levers: "ops",
   pricing: "ops",
-  // CRM is GBTN-internal (agency sales). It's added to the sidebar only for
-  // platform admins (see portal-nav), and every /portal/crm page is guarded by
-  // requireAdmin, so no client role ever reaches it. null keeps the type total.
+  // CRM (Acquire) is GBTN-internal (firm pipeline). It's added to the sidebar
+  // only for GBTN staff (see portal-nav), and every /portal/crm page is guarded
+  // by requireStaff in crm/layout.tsx (settings adds requireAdmin), so no client
+  // role ever reaches it. null keeps the type total.
   crm: null,
   settings: "marketing", // configures the marketing/CallRail connections
   account: null,

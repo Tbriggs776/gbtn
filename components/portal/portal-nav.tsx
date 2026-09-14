@@ -77,9 +77,10 @@ export function PortalNav({
     all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
     all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
   }
-  // CRM is GBTN's internal agency-sales tool — staff only (admins + employees).
+  // Acquire (the CRM) is GBTN's internal firm pipeline — staff only (admins +
+  // employees). Label only: the path and nav key stay /portal/crm and "crm".
   if (isStaff) {
-    all.push({ label: "CRM", href: "/portal/crm", icon: "crm", key: "crm" });
+    all.push({ label: "Acquire · CRM", href: "/portal/crm", icon: "crm", key: "crm" });
   }
   all.push({ label: "Settings", href: "/portal/settings", icon: "settings", key: "settings" });
   all.push({ label: "Account", href: "/portal/account", icon: "account", key: "account" });
