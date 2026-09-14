@@ -87,18 +87,25 @@ export async function deleteDocumentAction(
 
   const { data: doc, error } = await supabase
     .from("documents")
-    .select("id, storage_path")
+    .select("id, storage_path, signature_request_id, signed_at")
     .eq("id", documentId)
     .single();
   if (error || !doc) return { error: "Not found." };
 
-  // Remove the object first, then the row.
-  await supabase.storage.from(BUCKET).remove([doc.storage_path]);
+  // A document that has ever been sent for signature is evidence. The DB guard
+  // refuses the delete too; this just says so plainly instead of surfacing it.
+  if (doc.signature_request_id || doc.signed_at) {
+    return { error: "This document has e-signature records and can't be deleted." };
+  }
+
+  // Row first, then the object: if the row delete is refused, the file must
+  // still be there for the row that points at it.
   const { error: delErr } = await supabase
     .from("documents")
     .delete()
     .eq("id", documentId);
   if (delErr) return { error: delErr.message };
+  await supabase.storage.from(BUCKET).remove([doc.storage_path]);
 
   revalidatePath("/portal/documents");
   revalidatePath("/portal");

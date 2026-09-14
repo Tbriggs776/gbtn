@@ -38,11 +38,16 @@ export async function sendEmail({
   subject,
   html,
   replyTo,
+  bcc,
+  attachments,
 }: {
   to?: string | string[];
   subject: string;
   html: string;
   replyTo?: string;
+  bcc?: string | string[];
+  // Resend REST shape: content is base64.
+  attachments?: { filename: string; content: string; content_type?: string }[];
 }): Promise<SendResult> {
   if (!RESEND_API_KEY) {
     return { ok: false, error: "RESEND_API_KEY is not configured." };
@@ -61,6 +66,8 @@ export async function sendEmail({
         subject,
         html,
         ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(bcc ? { bcc } : {}),
+        ...(attachments?.length ? { attachments } : {}),
       }),
     });
     if (!res.ok) {
