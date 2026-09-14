@@ -14,7 +14,7 @@ import { services, addOns, audiences } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Services",
   description:
-    "Profit by the Numbers, Scale by the Numbers, and Institutional-Grade Scale: a productized offer ladder for home-services operators and PE-backed platforms.",
+    "Diagnose, Install, Institutionalize: a productized offer ladder that installs financial ops, metrics, and cadence for operator-led companies.",
 };
 
 export default function ServicesPage() {
@@ -65,7 +65,7 @@ export default function ServicesPage() {
                   <p className="mt-4 text-base leading-relaxed text-muted">
                     {s.summary}
                   </p>
-                  <div className="mt-6 grid grid-cols-2 gap-3">
+                  <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-xl bg-paper-soft p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">
                         Timeline
@@ -76,10 +76,10 @@ export default function ServicesPage() {
                     </div>
                     <div className="rounded-xl bg-paper-soft p-4">
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft">
-                        Investment
+                        Ladder rung
                       </p>
                       <p className="mt-1 text-sm font-bold text-ink">
-                        {s.price}
+                        {s.rungLabel}
                       </p>
                     </div>
                   </div>
@@ -127,19 +127,18 @@ export default function ServicesPage() {
             {addOns.map((a) => (
               <div
                 key={a.name}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-white px-6 py-5 ring-soft"
+                className="flex items-center gap-3 rounded-2xl border border-line bg-white px-6 py-5 ring-soft"
               >
+                <Check className="text-brand-500" />
                 <span className="text-sm font-semibold text-ink">{a.name}</span>
-                <span className="shrink-0 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                  {a.range}
-                </span>
               </div>
             ))}
           </div>
           <p className="mt-6 text-sm text-muted-soft">
-            Pricing depends on entity complexity: locations, acquisitions, data
-            cleanliness, and systems. Optional success-fee and advisory-equity
-            structures available for the right fit.
+            Scope depends on entity complexity: locations, acquisitions, data
+            cleanliness, and systems. We size each engagement to fit — pricing is
+            a conversation, not a rate card. Optional success-fee and
+            advisory-equity structures available for the right fit.
           </p>
         </Container>
       </Section>
@@ -148,8 +147,8 @@ export default function ServicesPage() {
       <Section>
         <Container>
           <SectionHeading
-            eyebrow="Who I serve"
-            title="Two audiences. One operating system."
+            eyebrow="Who we serve"
+            title="Operator-led companies. One operating system."
             align="center"
           />
           <div className="mx-auto mt-12 grid max-w-4xl gap-6 sm:grid-cols-2">

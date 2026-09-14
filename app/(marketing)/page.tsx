@@ -17,6 +17,7 @@ import {
 } from "@/components/sections";
 import { WaitlistForm } from "@/components/waitlist-form";
 import {
+  positioning,
   services,
   differentiators,
   trackRecord,
@@ -37,25 +38,23 @@ export default function HomePage() {
           <div className="mx-auto max-w-3xl text-center">
             <span className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
               <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-              Operator CFO · Home Services &amp; PE-Backed Platforms
+              {positioning.badge}
             </span>
             <h1 className="animate-fade-up mt-6 text-balance text-4xl font-bold tracking-tight text-white sm:text-6xl">
-              You&apos;re growing on gut. We&apos;ll help you grow{" "}
-              <span className="text-gradient">by the numbers.</span>
+              You&apos;re growing on gut. We&apos;ll install{" "}
+              <span className="text-gradient">how you scale.</span>
             </h1>
             <p className="animate-fade-up mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/70">
-              Most operators are flying blind: revenue up, profit flat, and no
-              system to tell them why. Growth by the Numbers installs the finance
-              engine that turns growth into predictable profit and cash. Led by
-              Tyler Briggs, who scaled a PE-backed home-services platform from{" "}
+              {positioning.hero.subhead} Founded by Tyler Briggs, who scaled a
+              PE-backed platform from{" "}
               <span className="font-semibold text-white">$30M to $100M+</span>.
             </p>
             <div className="animate-fade-up mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button href="/contact" variant="primary">
                 Book a consultation <Arrow />
               </Button>
-              <Button href="/about" variant="light">
-                Meet your CFO
+              <Button href="/services" variant="light">
+                See how we work
               </Button>
             </div>
           </div>
@@ -88,7 +87,7 @@ export default function HomePage() {
                   href="/services"
                   className="inline-flex items-center gap-2 text-sm font-semibold text-brand-700 hover:text-brand-600"
                 >
-                  See how I work <Arrow />
+                  See how we work <Arrow />
                 </Link>
               </div>
             </div>
@@ -156,8 +155,8 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <div className="mt-auto flex items-center justify-between pt-6">
-                  <span className="text-sm font-semibold text-ink">
-                    {s.price}
+                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-soft">
+                    {s.rungLabel}
                   </span>
                   <Link
                     href="/services"

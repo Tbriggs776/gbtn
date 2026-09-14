@@ -25,6 +25,19 @@ export const site = {
   },
 } as const;
 
+// ── Firm positioning (Advantage OS) ─────────────────────────────────────────
+// GBTN is the scale-consulting firm that installs the operating system —
+// financial ops, metrics, and cadence — so operator-led companies grow on
+// evidence, not gut. Home services is a proof point, not the fence.
+export const positioning = {
+  badge: "Scale consulting · financial ops + metrics",
+  hero: {
+    headline: "You're growing on gut. We'll install how you scale.",
+    subhead:
+      "Growth by the Numbers installs the operating system — financial ops, metrics, and cadence — for operator-led companies, small or large. Built by operators, delivered by a team.",
+  },
+} as const;
+
 export const nav = [
   { label: "About", href: "/about" },
   { label: "Services", href: "/services" },
@@ -85,10 +98,11 @@ export const services = [
   {
     id: "profit",
     tier: "Diagnostic",
+    rung: "diagnose",
+    rungLabel: "Diagnose",
     eyebrow: "Start here",
     title: "Profit by the Numbers",
     timeline: "2-4 weeks",
-    price: "$7.5k-$25k",
     summary:
       "A fast, forensic read on where margin and cash are leaking, and the prioritized plan to stop it. Most clients see measurable improvement inside 30 days.",
     deliverables: [
@@ -103,10 +117,11 @@ export const services = [
   {
     id: "scale",
     tier: "Build + Cadence",
+    rung: "install",
+    rungLabel: "Install",
     eyebrow: "Build the engine",
     title: "Scale by the Numbers",
     timeline: "6-12 weeks + retainer",
-    price: "$15k build + $6-15k/mo",
     summary:
       "The planning and reporting cadence your leadership runs every week, not just month-end financials. We install the operating system and the rhythm that makes it stick.",
     deliverables: [
@@ -121,10 +136,11 @@ export const services = [
   {
     id: "institutional",
     tier: "PE-Ready Platform",
+    rung: "institutionalize",
+    rungLabel: "Institutionalize",
     eyebrow: "Institutional grade",
     title: "Institutional-Grade Scale",
     timeline: "3-6+ months",
-    price: "$15k-$35k/mo + projects",
     summary:
       "The full investor-grade finance stack (board reporting, controls, systems, and M&A integration) so value creation becomes repeatable and the platform is ready for its next phase.",
     deliverables: [
@@ -138,14 +154,14 @@ export const services = [
   },
 ] as const;
 
-// Common add-on sprints.
+// Common add-on sprints. Pricing is a consultation conversation, not a rate card.
 export const addOns = [
-  { name: "13-week cash forecast + cash war room", range: "$2.5k-$6k" },
-  { name: "Pricing & gross-margin reset sprint", range: "$5k-$12k" },
-  { name: "AP/AR cleanup + collections playbook", range: "$3k-$10k" },
-  { name: "Job / branch profitability build", range: "$5k-$15k" },
-  { name: "Vendor negotiation sprint", range: "$3k-$8k + savings share" },
-  { name: "Post-acquisition integration sprint (30/60/90)", range: "$7.5k-$20k" },
+  { name: "13-week cash forecast + cash war room" },
+  { name: "Pricing & gross-margin reset sprint" },
+  { name: "AP/AR cleanup + collections playbook" },
+  { name: "Job / branch profitability build" },
+  { name: "Vendor negotiation sprint" },
+  { name: "Post-acquisition integration sprint (30/60/90)" },
 ] as const;
 
 // Who GBTN serves: two related audiences.
@@ -172,7 +188,7 @@ export const process = [
   {
     step: "02",
     title: "Build the cadence",
-    body: "I install the financial infrastructure that fits your stage (forecast, unit economics, KPI dashboard) and the weekly rhythm your team runs on.",
+    body: "We install the financial infrastructure that fits your stage (forecast, unit economics, KPI dashboard) and the weekly rhythm your team runs on.",
   },
   {
     step: "03",
@@ -301,7 +317,7 @@ export const differentiators = [
   },
   {
     title: "Hands-on, not hand-off",
-    body: "I build the models and the cadence myself. When you hire Growth by the Numbers, you get me, the operator.",
+    body: "We build the models and the cadence with you and run them alongside your team — founder-led by Tyler, delivered as a firm, not a slide deck tossed over the wall.",
   },
 ] as const;
 
