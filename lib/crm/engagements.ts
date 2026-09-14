@@ -82,9 +82,11 @@ async function provisionClientFromName(db: SupabaseClient, name: string): Promis
     if (!clash) break;
     slug = `${slugify(base)}-${i}`;
   }
+  // 'prospect' until kickoff, mirroring provision.ts's QBO-sourced leads — a deal
+  // that just converted isn't an active client engagement until work starts.
   const { data, error } = await db
     .from("clients")
-    .insert({ name: base, slug, status: "active", source: "manual" })
+    .insert({ name: base, slug, status: "prospect", source: "manual" })
     .select("id")
     .single();
   if (error || !data) throw new Error(`Failed to create client: ${error?.message}`);
