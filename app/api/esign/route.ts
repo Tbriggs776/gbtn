@@ -3,20 +3,22 @@ import { TOKEN_RE, type EsignErrorCode } from "@/lib/esign/types";
 import { EsignError, esignJson, toResponse } from "@/lib/esign/errors";
 import { assertSameOrigin, contextFromRequest } from "@/lib/esign/request-context";
 import {
-  declineSignature,
+  declineRecipient,
+  getOriginalUrl,
   getSealedUrl,
   getSourceUrl,
   loadSigningView,
   markViewed,
   sendOtp,
-  submitSignature,
+  submitRecipient,
   verifyOtp,
 } from "@/lib/esign/engine";
 
 /**
  * The signer's API: every action a token holder can take on /sign/[token].
  *
- * This is the only e-sign mutation surface reachable without a session.
+ * This is the only e-sign mutation surface reachable without a session (the
+ * seal route next door only triggers idempotent, lease-guarded sealing).
  * Middleware matches /portal/* only, so nothing runs in front of it; the token
  * itself is the capability. Every call is authorized inside the engine by
  * TOKEN_RE plus a token_hash lookup before the service role reads anything.
@@ -30,21 +32,35 @@ import {
  *   Headers. esignJson/toResponse stamp no-store, no-referrer, noindex and
  *   nosniff on every response, success or error.
  *
+ *   Sealing. Submit never seals (C11); the page calls /api/esign/seal.
+ *
  *   Logging. Never the token, the body, or row data — only the action and an
  *   error class name.
  */
-export const runtime = "nodejs"; // pdf-lib, node:crypto, Buffer
+export const runtime = "nodejs"; // node:crypto, Buffer, pdf-lib probe
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // submit downloads two PDFs, seals, uploads three objects
+export const maxDuration = 60; // submit re-hashes the frozen render/original and the client-files original
 
-// A signature PNG is at most 350 KB decoded (~470 KB base64); nothing else is big.
+// A signature PNG is at most 350 KB decoded (~470 KB base64) and is reused for
+// every field, so the body does not grow with field count.
 const MAX_BODY = 1_000_000;
 
 const Token = z.string().regex(TOKEN_RE);
+const Uuid = z.string().uuid();
+const Signature = z.discriminatedUnion("method", [
+  z.object({
+    method: z.literal("drawn"),
+    png: z.string().startsWith("data:image/png;base64,").max(480_000),
+    inkLength: z.number().finite().min(0).max(1_000_000),
+  }),
+  // Normalization and the 2-120 rule happen in the engine.
+  z.object({ method: z.literal("typed"), text: z.string().min(1).max(200) }),
+]);
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("get"), token: Token }),
   z.object({ action: z.literal("view"), token: Token }),
   z.object({ action: z.literal("source_url"), token: Token }),
+  z.object({ action: z.literal("original_url"), token: Token }),
   z.object({ action: z.literal("send_otp"), token: Token }),
   z.object({ action: z.literal("verify_otp"), token: Token, code: z.string().regex(/^\d{6}$/) }),
   z.object({
@@ -52,8 +68,9 @@ const Body = z.discriminatedUnion("action", [
     token: Token,
     consent: z.literal(true),
     printedName: z.string().trim().min(2).max(120),
-    signaturePng: z.string().startsWith("data:image/png;base64,").max(480_000),
-    inkLength: z.number().finite().min(0).max(1_000_000),
+    timeZone: z.string().trim().min(1).max(64),
+    signature: Signature,
+    appliedFieldIds: z.array(Uuid).min(1).max(100),
     otpSession: z.string().regex(TOKEN_RE).optional(),
   }),
   z.object({
@@ -138,6 +155,8 @@ export async function POST(req: Request) {
         return esignJson({ ok: true, data: await markViewed(body.token, ctx) }, 200);
       case "source_url":
         return esignJson({ ok: true, data: await getSourceUrl(body.token, ctx) }, 200);
+      case "original_url":
+        return esignJson({ ok: true, data: await getOriginalUrl(body.token, ctx) }, 200);
       case "send_otp":
         return esignJson({ ok: true, data: await sendOtp(body.token, ctx) }, 200);
       case "verify_otp":
@@ -146,12 +165,13 @@ export async function POST(req: Request) {
         return esignJson(
           {
             ok: true,
-            data: await submitSignature(
+            data: await submitRecipient(
               body.token,
               {
                 printedName: body.printedName,
-                signaturePng: body.signaturePng,
-                inkLength: body.inkLength,
+                timeZone: body.timeZone,
+                signature: body.signature,
+                appliedFieldIds: body.appliedFieldIds,
                 otpSession: body.otpSession ?? null,
               },
               ctx
@@ -163,7 +183,7 @@ export async function POST(req: Request) {
         return esignJson(
           {
             ok: true,
-            data: await declineSignature(
+            data: await declineRecipient(
               body.token,
               { reason: body.reason ? body.reason : null, otpSession: body.otpSession ?? null },
               ctx

@@ -6,42 +6,97 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 // mouse, pen and touch; `touch-none` stops the page scrolling under a finger.
 // The backing store is scaled by devicePixelRatio so strokes stay crisp, and the
 // PNG is exported once per stroke (not on every move) onto a transparent canvas
-// sized inside the server's checks in lib/esign/signature-image.ts (B.7).
+// sized inside the server's checks in lib/esign/signature-image.ts.
 
 const INK = "#11294a"; // --color-ink
 const LINE_WIDTH = 2.25;
 
-// B.7 accepts 100–2400 px wide, 40–1200 px tall, and at most 350 KB decoded.
-// Export is capped at 1200 px wide so a normal signature lands far below the
-// byte cap; a pathological one is stepped down until it fits.
-const EXPORT_MAX_WIDTH = 1200;
+// signature-image.ts accepts 100–2400 px wide, 40–1200 px tall, and at most
+// 350 KB decoded (addendum C21). Export trims to the ink's bounding box plus a
+// margin, scales down to fit 2400×1200 keeping the aspect ratio, steps down
+// further only when over the byte cap, and pads the canvas to the minimums.
+const EXPORT_MAX_WIDTH = 2400;
 const EXPORT_MAX_HEIGHT = 1200;
+const EXPORT_MIN_WIDTH = 100;
+const EXPORT_MIN_HEIGHT = 40;
+const TRIM_MARGIN_PX = 8;
 const SIGNATURE_MAX_BYTES = 350_000;
+/** signature-image.ts SIGNATURE_MIN_BYTES: a smaller PNG is refused as signature_invalid. */
+export const SIGNATURE_MIN_BYTES = 256;
 const DATA_URL_PREFIX = "data:image/png;base64,";
 
-function decodedBytes(dataUrl: string): number {
-  return Math.floor(((dataUrl.length - DATA_URL_PREFIX.length) * 3) / 4);
+/** Exact decoded size of a base64 PNG data URL, as the server's Buffer measures it. */
+export function signaturePngBytes(dataUrl: string): number {
+  const b64 = dataUrl.startsWith(DATA_URL_PREFIX) ? dataUrl.slice(DATA_URL_PREFIX.length) : "";
+  const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - padding);
+}
+
+/** Bounding box of every non-transparent pixel, plus the margin, in backing pixels. */
+function inkBounds(canvas: HTMLCanvasElement): { x: number; y: number; w: number; h: number } | null {
+  const width = canvas.width;
+  const height = canvas.height;
+  if (width === 0 || height === 0) return null;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, width, height).data;
+  } catch {
+    return null;
+  }
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      if (data[(row + x) * 4 + 3] !== 0) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return null;
+  const x0 = Math.max(0, minX - TRIM_MARGIN_PX);
+  const y0 = Math.max(0, minY - TRIM_MARGIN_PX);
+  const x1 = Math.min(width, maxX + 1 + TRIM_MARGIN_PX);
+  const y1 = Math.min(height, maxY + 1 + TRIM_MARGIN_PX);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 function exportPng(source: HTMLCanvasElement): string | null {
+  const bounds = inkBounds(source);
+  if (!bounds) return null;
   const out = document.createElement("canvas");
-  let scale = Math.min(
-    1,
-    EXPORT_MAX_WIDTH / source.width,
-    EXPORT_MAX_HEIGHT / source.height
-  );
-  for (let i = 0; i < 6; i++) {
-    out.width = Math.max(1, Math.round(source.width * scale));
-    out.height = Math.max(1, Math.round(source.height * scale));
+  let scale = Math.min(1, EXPORT_MAX_WIDTH / bounds.w, EXPORT_MAX_HEIGHT / bounds.h);
+  for (let i = 0; i < 8; i++) {
+    const drawW = Math.max(1, Math.round(bounds.w * scale));
+    const drawH = Math.max(1, Math.round(bounds.h * scale));
+    out.width = Math.min(EXPORT_MAX_WIDTH, Math.max(EXPORT_MIN_WIDTH, drawW));
+    out.height = Math.min(EXPORT_MAX_HEIGHT, Math.max(EXPORT_MIN_HEIGHT, drawH));
     // Resizing resets context state, so configure after sizing.
     const ctx = out.getContext("2d");
     if (!ctx) return null;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(source, 0, 0, out.width, out.height);
+    ctx.drawImage(
+      source,
+      bounds.x,
+      bounds.y,
+      bounds.w,
+      bounds.h,
+      Math.round((out.width - drawW) / 2),
+      Math.round((out.height - drawH) / 2),
+      drawW,
+      drawH
+    );
     const png = out.toDataURL("image/png");
     if (!png.startsWith(DATA_URL_PREFIX)) return null;
-    if (decodedBytes(png) <= SIGNATURE_MAX_BYTES) return png;
+    if (signaturePngBytes(png) <= SIGNATURE_MAX_BYTES) return png;
     scale *= 0.75;
   }
   return null;
@@ -188,7 +243,7 @@ export function SignaturePad({
           disabled ? "border-line bg-paper-soft" : "border-brand-200 bg-white"
         }`}
       >
-        {/* Signature baseline, under the canvas. */}
+        {/* Signature baseline, under the canvas (never exported). */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-6 bottom-11 border-b border-line"

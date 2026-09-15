@@ -1,0 +1,4 @@
+# pdf.js is copied here from node_modules by scripts/vendor-pdfjs.mjs (predev /
+# prebuild). It is a build artifact: never commit it. Kept as a nested ignore so
+# the root .gitignore is never touched.
+pdfjs/

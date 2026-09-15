@@ -6,21 +6,32 @@ import { PortalHeader, PortalShell, NoClientState } from "@/components/portal/ui
 import { DocumentManager } from "@/components/portal/document-manager";
 import type { ClientDocument } from "@/lib/types";
 import { visibleDocumentCategories } from "@/lib/permissions";
+import { listStaffSigners } from "@/lib/esign/engine";
 import {
+  ENVELOPE_STATUSES,
   ESIGN_DOC_TYPES,
-  ESIGN_STATUSES,
+  RECIPIENT_STATUSES,
+  type EnvelopeStatus,
+  type EnvelopeSummary,
   type EsignDocType,
   type EsignStaffData,
-  type EsignStatus,
   type EsignTypeSummary,
   type EsignUploaderInfo,
-  type StaffRequestSummary,
+  type RecipientKind,
+  type RecipientStatus,
+  type RecipientSummary,
+  type RoutingMode,
+  type SealingMode,
+  type SignatureMethod,
+  type SourceMode,
   type UploaderRole,
 } from "@/lib/esign/types";
 
-// Server actions invoked from this page (send for signature downloads, inspects
-// and freezes the PDF before calling the RPC) inherit this segment's budget.
-export const maxDuration = 60;
+// Server actions invoked from this page inherit this segment's budget. Send
+// downloads, sniffs, converts and freezes the source before the RPC, and staff
+// "Finish sealing" builds the whole sealed envelope in the action (C11), so the
+// budget matches the seal route's 300 s.
+export const maxDuration = 300;
 
 export default async function DocumentsPage({
   searchParams,
@@ -64,7 +75,7 @@ export default async function DocumentsPage({
     .returns<ClientDocument[]>();
 
   // One timestamp for every label and eligibility call, server and client, so
-  // "Sent for signature" vs "Signature link expired" can't flip on hydration.
+  // "In progress" vs "Expired" can't flip on hydration.
   const nowIso = new Date().toISOString();
 
   // E-sign controls are staff-only. Nothing e-sign-specific is fetched for
@@ -72,6 +83,18 @@ export default async function DocumentsPage({
   const staff = session?.isStaff
     ? await loadEsignStaffData(supabase, activeClient.id, documents ?? [])
     : null;
+
+  // Clients can't read envelope rows (staff-only policies), yet a fully signed
+  // agreement that is still sealing must read "Signed, finishing", not "Sent".
+  // Only id / status / expiry, only for this client's own sent documents, and
+  // only after the capability gate above.
+  const envelopeStates = staff ? null : await loadClientEnvelopeStates(activeClient.id, documents ?? []);
+
+  // The legal name feeds signature-block detection in the send wizard, so it
+  // is only read when the wizard can open.
+  const clientLegalName = staff
+    ? await loadClientLegalName(supabase, activeClient.id, activeClient.name)
+    : activeClient.name;
 
   return (
     <PortalShell>
@@ -85,7 +108,9 @@ export default async function DocumentsPage({
           documents={documents ?? []}
           canUploadFinancials={allCategories}
           staff={staff}
+          envelopeStates={envelopeStates}
           nowIso={nowIso}
+          clientLegalName={clientLegalName}
         />
       </div>
     </PortalShell>
@@ -93,14 +118,39 @@ export default async function DocumentsPage({
 }
 
 const DOC_TYPES: readonly string[] = ESIGN_DOC_TYPES;
-const STATUSES: readonly string[] = ESIGN_STATUSES;
+const ENV_STATUSES: readonly string[] = ENVELOPE_STATUSES;
+const REC_STATUSES: readonly string[] = RECIPIENT_STATUSES;
 
 function isDocType(v: unknown): v is EsignDocType {
   return typeof v === "string" && DOC_TYPES.includes(v);
 }
 
-function isStatus(v: unknown): v is EsignStatus {
-  return typeof v === "string" && STATUSES.includes(v);
+function isEnvelopeStatus(v: unknown): v is EnvelopeStatus {
+  return typeof v === "string" && ENV_STATUSES.includes(v);
+}
+
+function isRecipientStatus(v: unknown): v is RecipientStatus {
+  return typeof v === "string" && REC_STATUSES.includes(v);
+}
+
+function toRouting(v: unknown): RoutingMode | null {
+  return v === "parallel" || v === "sequential" ? v : null;
+}
+
+function toSourceMode(v: unknown): SourceMode | null {
+  return v === "pdf" || v === "image_pdf" || v === "certificate" ? v : null;
+}
+
+function toSealingMode(v: unknown): SealingMode {
+  return v === "page" || v === "certificate" ? v : "auto";
+}
+
+function toRecipientKind(v: unknown): RecipientKind | null {
+  return v === "client_contact" || v === "outside" || v === "staff" ? v : null;
+}
+
+function toMethod(v: unknown): SignatureMethod | null {
+  return v === "drawn" || v === "typed" ? v : null;
 }
 
 function toUploaderRole(v: unknown): UploaderRole {
@@ -111,15 +161,79 @@ function str(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
+function int(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : fallback;
+}
+
+/**
+ * Status-only envelope view for non-staff viewers: {id, status, expiresAt} for
+ * the envelope each visible 'sent' document points at. Service role, because
+ * clients have no read policy on signature_envelope; scoped to this client and
+ * to envelope ids taken from rows RLS already let this viewer read. Never
+ * throws; any error means plain labels.
+ */
+async function loadClientEnvelopeStates(
+  clientId: string,
+  documents: ClientDocument[]
+): Promise<Record<string, { id: string; status: string; expiresAt: string }>> {
+  const docByEnvelope = new Map<string, string>();
+  for (const d of documents) {
+    if (d.esign_envelope_id && d.status === "sent") docByEnvelope.set(d.esign_envelope_id, d.id);
+  }
+  if (docByEnvelope.size === 0) return {};
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("signature_envelope")
+      .select("id,status,expires_at")
+      .eq("client_id", clientId)
+      .in("id", [...docByEnvelope.keys()]);
+    if (error) return {};
+    const out: Record<string, { id: string; status: string; expiresAt: string }> = {};
+    for (const row of data ?? []) {
+      const id = str(row.id);
+      const documentId = id ? docByEnvelope.get(id) : undefined;
+      const status = str(row.status);
+      const expiresAt = str(row.expires_at);
+      if (!id || !documentId || !status || !expiresAt) continue;
+      out[documentId] = { id, status, expiresAt };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** legal_name ?? name. Any read error falls back to the display name. */
+async function loadClientLegalName(
+  supabase: SupabaseClient,
+  clientId: string,
+  fallback: string
+): Promise<string> {
+  try {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("legal_name")
+      .eq("id", clientId)
+      .maybeSingle();
+    if (error || !data) return fallback;
+    const legal = str(data.legal_name)?.trim();
+    return legal ? legal : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * The staff-only e-sign view model. Any read error returns null, which hides
  * every e-sign control; it never throws (there is no error.tsx to catch it).
  *
- * The four reads go through the cookie client with an explicit client_id
+ * Every table read goes through the cookie client with an explicit client_id
  * filter — for a platform admin RLS passes every client, so the filter is the
- * tenant boundary. Only uploader roles use the service role: an employee can't
- * read other profiles through RLS, and the caller is already staff and past
- * requireCapability(documents).
+ * tenant boundary — and names its columns, because column-level grants make
+ * select("*") fail on the e-sign tables. The service role is used only for
+ * uploader roles and the countersigner list: the caller is already staff and
+ * past requireCapability(documents).
  */
 async function loadEsignStaffData(
   supabase: SupabaseClient,
@@ -127,10 +241,12 @@ async function loadEsignStaffData(
   documents: ClientDocument[]
 ): Promise<EsignStaffData | null> {
   try {
-    const [types, contacts, engagements, requests] = await Promise.all([
+    const [types, contacts, engagements, envelopes] = await Promise.all([
       supabase
         .from("esign_document_type")
-        .select("document_type,label,require_sms_otp,activates_engagement,expiry_days,allowed_content_types")
+        .select(
+          "document_type,label,require_sms_otp,activates_engagement,expiry_days,allowed_content_types,sealing_mode,max_recipients,allow_typed_signature,allow_outside_signers"
+        )
         .eq("esign_enabled", true),
       supabase
         .from("client_contacts")
@@ -140,13 +256,15 @@ async function loadEsignStaffData(
         .order("full_name"),
       supabase.from("engagements").select("id,name,status").eq("client_id", clientId),
       supabase
-        .from("signature_request")
-        .select("id,document_id,status,signer_name,signer_email,sent_at,viewed_at,signed_at,expires_at")
+        .from("signature_envelope")
+        .select(
+          "id,document_id,status,routing_mode,source_mode,sent_at,expires_at,completed_at,completing_at,seal_attempts,seal_next_attempt_at"
+        )
         .eq("client_id", clientId)
         .order("sent_at", { ascending: false })
         .limit(200),
     ]);
-    if (types.error || contacts.error || engagements.error || requests.error) return null;
+    if (types.error || contacts.error || engagements.error || envelopes.error) return null;
 
     const typeSummaries: EsignTypeSummary[] = [];
     for (const row of types.data ?? []) {
@@ -156,32 +274,78 @@ async function loadEsignStaffData(
         label: str(row.label) ?? row.document_type,
         requireSmsOtp: row.require_sms_otp === true,
         activatesEngagement: row.activates_engagement === true,
-        expiryDays: typeof row.expiry_days === "number" ? row.expiry_days : 0,
+        expiryDays: int(row.expiry_days, 0),
         allowedContentTypes: Array.isArray(row.allowed_content_types)
           ? row.allowed_content_types.filter((t: unknown): t is string => typeof t === "string")
           : [],
+        sealingMode: toSealingMode(row.sealing_mode),
+        maxRecipients: Math.min(10, Math.max(1, int(row.max_recipients, 1))),
+        allowTypedSignature: row.allow_typed_signature === true,
+        allowOutsideSigners: row.allow_outside_signers === true,
       });
     }
 
     // Rows arrive newest first, so the first row per document is its latest.
-    const latestByDocument: Record<string, StaffRequestSummary> = {};
-    for (const row of requests.data ?? []) {
+    const envelopesByDocument: Record<string, EnvelopeSummary> = {};
+    for (const row of envelopes.data ?? []) {
       const documentId = str(row.document_id);
       const sentAt = str(row.sent_at);
       const expiresAt = str(row.expires_at);
-      if (!documentId || !sentAt || !expiresAt || !isStatus(row.status)) continue;
-      if (latestByDocument[documentId]) continue;
-      latestByDocument[documentId] = {
+      const routing = toRouting(row.routing_mode);
+      const sourceMode = toSourceMode(row.source_mode);
+      if (!documentId || !sentAt || !expiresAt || !routing || !sourceMode) continue;
+      if (!isEnvelopeStatus(row.status)) continue;
+      if (envelopesByDocument[documentId]) continue;
+      envelopesByDocument[documentId] = {
         id: String(row.id),
         documentId,
         status: row.status,
-        signerName: str(row.signer_name) ?? "",
-        signerEmail: str(row.signer_email) ?? "",
+        routing,
+        sourceMode,
         sentAt,
-        viewedAt: str(row.viewed_at),
-        signedAt: str(row.signed_at),
         expiresAt,
+        completedAt: str(row.completed_at),
+        completingAt: str(row.completing_at),
+        sealAttempts: int(row.seal_attempts, 0),
+        sealNextAttemptAt: str(row.seal_next_attempt_at),
+        recipients: [],
       };
+    }
+
+    const latestIds = Object.values(envelopesByDocument).map((e) => e.id);
+    if (latestIds.length > 0) {
+      const { data: recipients, error } = await supabase
+        .from("signature_recipient")
+        .select("id,envelope_id,kind,routing_order,name,email,status,activated_at,viewed_at,signed_at,signature_method")
+        .in("envelope_id", latestIds)
+        .eq("client_id", clientId);
+      if (error) return null;
+
+      const byEnvelope = new Map<string, RecipientSummary[]>();
+      for (const r of recipients ?? []) {
+        const envelopeId = str(r.envelope_id);
+        const kind = toRecipientKind(r.kind);
+        if (!envelopeId || !kind || !isRecipientStatus(r.status)) continue;
+        const list = byEnvelope.get(envelopeId) ?? [];
+        list.push({
+          id: String(r.id),
+          kind,
+          order: int(r.routing_order, 1),
+          name: str(r.name) ?? "",
+          email: str(r.email) ?? "",
+          status: r.status,
+          activatedAt: str(r.activated_at),
+          viewedAt: str(r.viewed_at),
+          signedAt: str(r.signed_at),
+          method: toMethod(r.signature_method),
+        });
+        byEnvelope.set(envelopeId, list);
+      }
+      for (const envelope of Object.values(envelopesByDocument)) {
+        envelope.recipients = (byEnvelope.get(envelope.id) ?? []).sort(
+          (a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+        );
+      }
     }
 
     const uploaders: Record<string, EsignUploaderInfo> = {};
@@ -200,6 +364,10 @@ async function loadEsignStaffData(
       }
     }
 
+    // Platform admins only (S1). Service role inside the engine; never throws
+    // out of this function because it sits inside the try.
+    const staffSigners = await listStaffSigners(clientId);
+
     return {
       clientId,
       types: typeSummaries,
@@ -216,7 +384,8 @@ async function loadEsignStaffData(
         name: str(e.name) ?? "",
         status: str(e.status) ?? "",
       })),
-      latestByDocument,
+      staffSigners,
+      envelopesByDocument,
       uploaders,
     };
   } catch {
