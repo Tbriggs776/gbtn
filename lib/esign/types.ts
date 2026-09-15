@@ -315,11 +315,11 @@ export type DocumentStatusDoc = {
  * "Sent" without an envelope pointer is a seeded or manually-sent agreement,
  * never "Sent for signature".
  *
- * `envelope` is the latest envelope when the viewer has it (staff). Everyone
- * has signed a completing envelope, so it never reads as expired, even after
- * the document's signature_expires_at has passed while it seals. Without
- * envelope data (clients) this relies on 0032 clearing signature_expires_at
- * when the envelope moves to completing.
+ * `envelope` is the document's latest envelope: the staff view model for staff,
+ * or a status-only {id, status, expiresAt} the documents page loads for clients.
+ * Everyone has signed a completing envelope, so it reads "Signed, finishing" and
+ * never expired. 0032 also clears signature_expires_at on the move to
+ * completing, so even without envelope data the label never says expired.
  */
 export function documentStatusLabel(
   doc: DocumentStatusDoc, now: Date, envelope: { id: string; status: string; expiresAt: string } | null = null

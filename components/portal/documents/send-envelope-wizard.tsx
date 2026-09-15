@@ -51,13 +51,14 @@ const INPUT =
   "w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100";
 const LABEL = "block text-sm font-medium text-ink";
 const PREVIEW_ERROR = "We couldn't load a preview. Try again.";
-// The footer's reason must match the placement panel: page-box and asset
-// failures have no Retry button there, because retrying can't fix them.
+// The footer's reason must match the placement panel. Only a page-box failure
+// has no Retry button there (the same bytes give the same mismatch); an assets
+// failure keeps Retry, because the next attempt re-checks the vendored files.
 const PREVIEW_BLOCKED = "The preview didn't load, so sending is blocked. Retry it on the Place fields step.";
 const PREVIEW_BLOCKED_BY_KIND: Record<"generic" | "assets" | "pages", string> = {
   generic: PREVIEW_BLOCKED,
   pages: "This PDF's page boxes are ambiguous, so sending is blocked. Print it to PDF and upload it again.",
-  assets: "The PDF preview files are missing from this deploy, so sending is blocked.",
+  assets: "The PDF preview files didn't load, so sending is blocked. Retry it on the Place fields step.",
 };
 
 const PLACEABLE_SNIFFED = new Set(["application/pdf", "image/png", "image/jpeg"]);

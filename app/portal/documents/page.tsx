@@ -84,6 +84,12 @@ export default async function DocumentsPage({
     ? await loadEsignStaffData(supabase, activeClient.id, documents ?? [])
     : null;
 
+  // Clients can't read envelope rows (staff-only policies), yet a fully signed
+  // agreement that is still sealing must read "Signed, finishing", not "Sent".
+  // Only id / status / expiry, only for this client's own sent documents, and
+  // only after the capability gate above.
+  const envelopeStates = staff ? null : await loadClientEnvelopeStates(activeClient.id, documents ?? []);
+
   // The legal name feeds signature-block detection in the send wizard, so it
   // is only read when the wizard can open.
   const clientLegalName = staff
@@ -102,6 +108,7 @@ export default async function DocumentsPage({
           documents={documents ?? []}
           canUploadFinancials={allCategories}
           staff={staff}
+          envelopeStates={envelopeStates}
           nowIso={nowIso}
           clientLegalName={clientLegalName}
         />
@@ -156,6 +163,45 @@ function str(v: unknown): string | null {
 
 function int(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : fallback;
+}
+
+/**
+ * Status-only envelope view for non-staff viewers: {id, status, expiresAt} for
+ * the envelope each visible 'sent' document points at. Service role, because
+ * clients have no read policy on signature_envelope; scoped to this client and
+ * to envelope ids taken from rows RLS already let this viewer read. Never
+ * throws; any error means plain labels.
+ */
+async function loadClientEnvelopeStates(
+  clientId: string,
+  documents: ClientDocument[]
+): Promise<Record<string, { id: string; status: string; expiresAt: string }>> {
+  const docByEnvelope = new Map<string, string>();
+  for (const d of documents) {
+    if (d.esign_envelope_id && d.status === "sent") docByEnvelope.set(d.esign_envelope_id, d.id);
+  }
+  if (docByEnvelope.size === 0) return {};
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("signature_envelope")
+      .select("id,status,expires_at")
+      .eq("client_id", clientId)
+      .in("id", [...docByEnvelope.keys()]);
+    if (error) return {};
+    const out: Record<string, { id: string; status: string; expiresAt: string }> = {};
+    for (const row of data ?? []) {
+      const id = str(row.id);
+      const documentId = id ? docByEnvelope.get(id) : undefined;
+      const status = str(row.status);
+      const expiresAt = str(row.expires_at);
+      if (!id || !documentId || !status || !expiresAt) continue;
+      out[documentId] = { id, status, expiresAt };
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 /** legal_name ?? name. Any read error falls back to the display name. */

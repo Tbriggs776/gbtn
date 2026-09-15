@@ -70,6 +70,7 @@ export function DocumentManager({
   documents,
   canUploadFinancials = true,
   staff = null,
+  envelopeStates = null,
   nowIso,
   clientLegalName,
 }: {
@@ -81,6 +82,9 @@ export function DocumentManager({
   /** Non-null only for GBTN staff whose e-sign reads all succeeded. It is the
       only switch for the e-sign controls; clients see status + Signed copy. */
   staff?: EsignStaffData | null;
+  /** Non-staff viewers only: status of the envelope each sent document points
+      at, so a signed agreement that is still sealing reads "Signed, finishing". */
+  envelopeStates?: Record<string, { id: string; status: string; expiresAt: string }> | null;
   /** Server render time. Every label and eligibility call uses it, so the
       server and client render agree. */
   nowIso: string;
@@ -382,7 +386,7 @@ export function DocumentManager({
             <tbody className="divide-y divide-line">
               {documents.map((doc) => {
                 const latest = staff?.envelopesByDocument[doc.id] ?? null;
-                const docStatus = documentStatusLabel(doc, now, latest);
+                const docStatus = documentStatusLabel(doc, now, latest ?? envelopeStates?.[doc.id] ?? null);
                 const eff = latest ? effectiveEnvelopeStatus(latest, now) : null;
                 const open = eff === "in_progress" || eff === "completing";
                 const completingFor =
