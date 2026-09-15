@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { greatVibes } from "@/components/esign/signature-font";
 import { site } from "@/lib/site";
 
 // Public e-sign shell. Deliberately outside app/portal (no session, no portal
@@ -21,7 +22,7 @@ export default function SignLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-paper-soft">
+    <div className={`flex min-h-screen flex-col bg-paper-soft ${greatVibes.variable}`}>
       <header className="bg-ink">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <img

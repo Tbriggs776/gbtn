@@ -2,10 +2,13 @@ import "server-only";
 import { sha256Hex } from "./hash";
 
 // Cheap structural checks on the drawn signature before it reaches pdf-lib.
-// embedPng() still fully parses the PNG at seal time and throws on corrupt data.
+// probeSignaturePng() fully parses it at submit, and embedPng() again at seal.
+// The pad trims its export to the ink (C21), so a real signature can be a
+// small file; blankness is gated by inkLength ≥ 40 in the engine, and the byte
+// floor here only rejects degenerate images.
 
 export const SIGNATURE_MAX_BYTES = 350_000;
-const SIGNATURE_MIN_BYTES = 1_200; // heuristic: smaller is almost certainly blank
+const SIGNATURE_MIN_BYTES = 256;
 const PREFIX = "data:image/png;base64,";
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 

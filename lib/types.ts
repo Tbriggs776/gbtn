@@ -34,9 +34,10 @@ export type DocumentCategory =
   | "Other";
 
 // Every column is required with the nullability the database actually has
-// (0029 contract lifecycle + 0031 e-sign), so the row satisfies the e-sign
+// (0029 contract lifecycle + 0031/0032 e-sign), so the row satisfies the e-sign
 // helpers' parameter types under strict tsc. The e-sign columns are written
-// only by the service role; see supabase/migrations/0031_esign_engine.sql.
+// only by the service role; see supabase/migrations/0031_esign_engine.sql and
+// 0032_esign_envelopes.sql.
 export type ClientDocument = {
   id: string;
   client_id: string;
@@ -55,10 +56,13 @@ export type ClientDocument = {
   status: string;
   effective_date: string | null;
   visible_to_client: boolean;
+  /** v1 single-signer request pointer (retired by 0032; dropped in 0033). */
   signature_request_id: string | null;
+  /** v2 envelope pointer: the envelope this document is (or was) out for signature in. */
+  esign_envelope_id: string | null;
   signed_at: string | null;
   sealed_storage_path: string | null;
-  /** Expiry of the request in signature_request_id while it is out for signature. */
+  /** Expiry of the open envelope (or v1 request) while it is out for signature. */
   signature_expires_at: string | null;
 };
 

@@ -9,7 +9,7 @@ import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 //
 // A correct code mints an otpSession: a random value returned once to the
 // verifying browser and stored only as a sha256. submit/decline must present
-// it, so a passed code verifies that browser, not the request forever.
+// it, so a passed code verifies that browser, not the recipient forever.
 // Codes and sessions are never logged or written to event meta.
 
 export const OTP_TTL_SECONDS = 600,
@@ -31,9 +31,9 @@ export function generateOtpCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-/** HMAC-SHA256(hkdf key, `${requestId}:${code}`) as hex; binds a code to its request. */
-export function hashOtp(requestId: string, code: string): string {
-  return createHmac("sha256", hmacKey()).update(`${requestId}:${code}`, "utf8").digest("hex");
+/** HMAC-SHA256(hkdf key, `${recipientId}:${code}`) as hex; binds a code to one envelope recipient. */
+export function hashOtp(recipientId: string, code: string): string {
+  return createHmac("sha256", hmacKey()).update(`${recipientId}:${code}`, "utf8").digest("hex");
 }
 
 export function generateOtpSession(): { otpSession: string; otpSessionHash: string } {

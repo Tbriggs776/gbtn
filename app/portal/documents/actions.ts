@@ -79,6 +79,8 @@ export async function getDownloadUrlAction(
   return { url: data.signedUrl };
 }
 
+const ESIGN_RECORDS_UNDELETABLE = "This document has e-signature records and can't be deleted.";
+
 export async function deleteDocumentAction(
   documentId: string
 ): Promise<DocActionState> {
@@ -87,24 +89,41 @@ export async function deleteDocumentAction(
 
   const { data: doc, error } = await supabase
     .from("documents")
-    .select("id, storage_path, signature_request_id, signed_at")
+    .select("id, storage_path, signature_request_id, esign_envelope_id, signed_at")
     .eq("id", documentId)
     .single();
   if (error || !doc) return { error: "Not found." };
 
-  // A document that has ever been sent for signature is evidence. The DB guard
-  // refuses the delete too; this just says so plainly instead of surfacing it.
-  if (doc.signature_request_id || doc.signed_at) {
-    return { error: "This document has e-signature records and can't be deleted." };
+  // A document that has ever been sent for signature (a v1 request or a v2
+  // envelope) is evidence. The DB guard refuses the delete too; this just says
+  // so plainly instead of surfacing it.
+  if (doc.signature_request_id || doc.esign_envelope_id || doc.signed_at) {
+    return { error: ESIGN_RECORDS_UNDELETABLE };
   }
 
   // Row first, then the object: if the row delete is refused, the file must
   // still be there for the row that points at it.
-  const { error: delErr } = await supabase
+  const { data: deleted, error: delErr } = await supabase
     .from("documents")
     .delete()
-    .eq("id", documentId);
-  if (delErr) return { error: delErr.message };
+    .eq("id", documentId)
+    .select("id");
+  if (delErr) {
+    // 42501: documents_esign_guard. 23503: a signature_supersede row still
+    // points at this document (a superseded or restored sibling). Neither's raw
+    // Postgres text is shown.
+    if (
+      delErr.code === "23503" ||
+      (delErr.code === "42501" && /e-signature/i.test(delErr.message ?? ""))
+    ) {
+      return { error: ESIGN_RECORDS_UNDELETABLE };
+    }
+    return { error: "Could not delete the document. Refresh the page and try again." };
+  }
+  // An RLS-filtered delete succeeds with zero rows; keep the file in that case.
+  if (!deleted || deleted.length === 0) {
+    return { error: "Could not delete the document. Refresh the page and try again." };
+  }
   await supabase.storage.from(BUCKET).remove([doc.storage_path]);
 
   revalidatePath("/portal/documents");
