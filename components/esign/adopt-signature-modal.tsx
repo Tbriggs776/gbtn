@@ -217,8 +217,12 @@ function AdoptDialog({
             }}
           />
           {/* Always mounted so screen readers announce the text when it appears. */}
-          <p aria-live="polite" className="mt-1.5 text-xs text-crimson">
-            {drawTooSmall ? "That signature is too small to use. Keep drawing, or clear it and draw a fuller signature." : null}
+          <p aria-live="polite" className="text-xs text-crimson">
+            {drawTooSmall ? (
+              <span className="mt-1.5 block">
+                That signature is too small to use. Keep drawing, or clear it and draw a fuller signature.
+              </span>
+            ) : null}
           </p>
         </div>
 
