@@ -46,7 +46,7 @@ export function PortalNav({
   roles,
 }: {
   isAdmin: boolean;
-  /** GBTN staff (admin OR employee). Employees get a CRM-only sidebar. */
+  /** GBTN staff (admin OR employee). Employees get CRM, Ops Board, and Account. */
   isStaff?: boolean;
   clients: Client[];
   defaultClientId: string | null;
@@ -77,22 +77,23 @@ export function PortalNav({
     all.push({ label: "Operational Levers", href: "/portal/operational-levers", icon: "levers", key: "levers" });
     all.push({ label: "Pricing", href: "/portal/pricing", icon: "pricing", key: "pricing" });
   }
-  // Acquire (the CRM) is GBTN's internal firm pipeline — staff only (admins +
-  // employees). Label only: the path and nav key stay /portal/crm and "crm".
+  // Acquire (the CRM) and the Ops Board are GBTN-internal — staff only
+  // (admins + employees). Not tied to the Floor Daddy client slug.
   if (isStaff) {
     all.push({ label: "Acquire · CRM", href: "/portal/crm", icon: "crm", key: "crm" });
+    all.push({ label: "Ops Board", href: "/portal/ops-board", icon: "ops", key: "opsBoard" });
   }
   all.push({ label: "Settings", href: "/portal/settings", icon: "settings", key: "settings" });
   all.push({ label: "Account", href: "/portal/account", icon: "account", key: "account" });
   all.push({ label: "Admin", href: "/portal/admin", icon: "admin", key: "admin" });
 
   // Employees (staff who aren't platform admins) have no client data — give them
-  // a focused sidebar: CRM + Account only. Everyone else gets the capability
-  // matrix, which must mirror exactly what the server honours or links would
-  // bounce back to /portal.
+  // a focused sidebar: CRM, Ops Board, and Account. Everyone else gets the
+  // capability matrix, which must mirror exactly what the server honours or
+  // links would bounce back to /portal.
   const isEmployee = isStaff && !isAdmin;
   const items = isEmployee
-    ? all.filter((i) => i.key === "crm" || i.key === "account")
+    ? all.filter((i) => i.key === "crm" || i.key === "opsBoard" || i.key === "account")
     : all.filter((i) => canSeeNav(i.key, role, isAdmin));
 
   const isActive = (href: string) =>

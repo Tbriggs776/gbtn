@@ -81,7 +81,7 @@ export function normalizeRole(v: unknown): ClientRole {
 
 export type NavKey =
   | "overview" | "documents" | "financials" | "fpa" | "briefing" | "marketing" | "googleAds"
-  | "opsReports" | "levers" | "pricing" | "crm" | "settings" | "account" | "admin";
+  | "opsReports" | "levers" | "pricing" | "crm" | "opsBoard" | "settings" | "account" | "admin";
 
 /** null = always visible to anyone with access to the client. */
 export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
@@ -100,6 +100,9 @@ export const NAV_CAPABILITY: Record<NavKey, Capability | null> = {
   // by requireStaff in crm/layout.tsx (settings adds requireAdmin), so no client
   // role ever reaches it. null keeps the type total.
   crm: null,
+  // Ops Board is firm-internal operating work, same staff gate as CRM. The
+  // sidebar adds it only for staff; ops-board/layout.tsx calls requireStaff.
+  opsBoard: null,
   settings: "marketing", // configures the marketing/CallRail connections
   account: null,
   admin: "manage_users",
