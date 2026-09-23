@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { assertStaff } from "@/lib/auth";
+import { classifyIngestMail, hashIngestKey } from "@/lib/ops-board/ingest";
+import { applyIngest } from "@/lib/ops-board/persist";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   isOpsBoardOwner,
@@ -208,6 +211,86 @@ export async function moveOpsBoardItem(id: string, status: OpsBoardStatus): Prom
     return { ok: true };
   } catch (e) {
     return fail(e);
+  }
+}
+
+export type IngestEmailInput = {
+  from?: string | null;
+  subject?: string | null;
+  bodyText?: string | null;
+  receivedAt?: string | null;
+  externalKey?: string | null;
+  title?: string | null;
+  next_action?: string | null;
+  due_on?: string | null;
+  owner?: string | null;
+  force?: boolean;
+};
+
+export type IngestEmailResult =
+  | { ok: true; cardId: string; duplicate: boolean }
+  | { ok: false; error: string };
+
+const MAX_BODY = 100_000;
+
+export async function ingestOpsBoardEmail(input: IngestEmailInput): Promise<IngestEmailResult> {
+  try {
+    await assertStaff();
+    const from = (input.from ?? "").trim();
+    const subject = (input.subject ?? "").trim();
+    const bodyText = input.bodyText ?? "";
+    const receivedAt = (input.receivedAt ?? "").trim();
+    if (from.length > 500) return { ok: false, error: "From is too long." };
+    if (subject.length > 500) return { ok: false, error: "Subject is too long." };
+    if (bodyText.length > MAX_BODY) return { ok: false, error: "Body is too long." };
+    if (receivedAt.length > 80) return { ok: false, error: "Received date is too long." };
+    const providedKey = (input.externalKey ?? "").trim();
+    if (providedKey.length > 500) return { ok: false, error: "External key is too long." };
+    const due = parseDue(input.due_on);
+    if (!due.ok) return due;
+    if (input.owner && !isOpsBoardOwner(input.owner)) {
+      return { ok: false, error: "Owner must be Tyler or Karen." };
+    }
+    const force = input.force === true;
+    const externalKey = providedKey || (await hashIngestKey(from, subject, receivedAt));
+    const proposal = classifyIngestMail({
+      externalKey,
+      from,
+      subject,
+      bodyText,
+      receivedAt: receivedAt || null,
+    });
+    // A skip is a preview, not a write, unless staff explicitly create anyway.
+    // The API records skips; this action does not.
+    if (proposal.action === "skip" && !force) {
+      return { ok: false, error: proposal.reason ?? "This email does not look like ops work." };
+    }
+
+    const cards = await createClient();
+    const events = createAdminClient();
+    const result = await applyIngest(cards, events, {
+      externalKey,
+      from,
+      subject,
+      bodyText,
+      receivedAt: receivedAt || null,
+      dryRun: false,
+      review: {
+        title: blank(input.title, 500) ?? "",
+        nextAction: blank(input.next_action, 2000),
+        dueOn: due.due_on,
+        owner: parseOwner(input.owner),
+        force,
+      },
+    });
+    revalidatePath(PATH);
+    if (result.action === "error" || !result.cardId) {
+      return { ok: false, error: result.reason || "Could not ingest that email." };
+    }
+    return { ok: true, cardId: result.cardId, duplicate: result.action === "duplicate" };
+  } catch (e) {
+    const failed = fail(e);
+    return { ok: false, error: failed.ok ? "Something went wrong." : failed.error };
   }
 }
 

@@ -1,7 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { PortalHeader, PortalShell } from "@/components/portal/ui";
 import { OpsBoard } from "@/components/portal/ops-board/ops-board";
-import { parseOpsBoardItem, type OpsBoardItem } from "@/lib/ops-board/types";
+import {
+  parseOpsBoardIngestEvent,
+  parseOpsBoardItem,
+  type OpsBoardIngestEvent,
+  type OpsBoardItem,
+} from "@/lib/ops-board/types";
 
 export default async function OpsBoardPage() {
   const db = await createClient();
@@ -18,6 +23,20 @@ export default async function OpsBoardPage() {
     for (const row of data) {
       const item = parseOpsBoardItem(row);
       if (item) items.push(item);
+    }
+  }
+
+  const ingestEvents: OpsBoardIngestEvent[] = [];
+  const ingested = await db
+    .from("ops_board_ingest_events")
+    .select("id, external_key, from_addr, subject, status, card_id, error, created_at")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  // The log table is applied separately. A missing relation must not blank the board.
+  if (!ingested.error && Array.isArray(ingested.data)) {
+    for (const row of ingested.data) {
+      const event = parseOpsBoardIngestEvent(row);
+      if (event) ingestEvents.push(event);
     }
   }
 
@@ -38,7 +57,7 @@ export default async function OpsBoardPage() {
           {error.message || "The board could not be loaded."}
         </p>
       ) : (
-        <OpsBoard items={items} />
+        <OpsBoard items={items} ingestEvents={ingestEvents} />
       )}
     </PortalShell>
   );

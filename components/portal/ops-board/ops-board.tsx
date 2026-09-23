@@ -6,9 +6,11 @@ import { Badge, Button, ErrorText, Field, Modal, Select, TextArea, TextInput } f
 import {
   createOpsBoardItem,
   deleteOpsBoardItem,
+  ingestOpsBoardEmail,
   moveOpsBoardItem,
   updateOpsBoardItem,
 } from "@/app/portal/ops-board/actions";
+import { IngestEmailModal, type IngestEmailDraft } from "@/components/portal/ops-board/ingest-email";
 import {
   OPS_BOARD_COLUMNS,
   OPS_BOARD_OWNER_LABEL,
@@ -17,6 +19,7 @@ import {
   isOverdue,
   ownerForColumnMove,
   phoenixToday,
+  type OpsBoardIngestEvent,
   type OpsBoardItem,
   type OpsBoardOwner,
   type OpsBoardStatus,
@@ -64,7 +67,13 @@ function completedLabel(iso: string): string {
   return `Completed ${formatBoardDate(ymd)}`;
 }
 
-export function OpsBoard({ items }: { items: OpsBoardItem[] }) {
+export function OpsBoard({
+  items,
+  ingestEvents = [],
+}: {
+  items: OpsBoardItem[];
+  ingestEvents?: OpsBoardIngestEvent[];
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [local, setLocal] = useState(items);
@@ -74,6 +83,9 @@ export function OpsBoard({ items }: { items: OpsBoardItem[] }) {
   const [creating, setCreating] = useState(false);
   const [createKey, setCreateKey] = useState(0);
   const [createSeed, setCreateSeed] = useState<Draft>(EMPTY_DRAFT);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestKey, setIngestKey] = useState(0);
+  const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<OpsBoardItem | null>(null);
   const today = phoenixToday();
 
@@ -120,26 +132,89 @@ export function OpsBoard({ items }: { items: OpsBoardItem[] }) {
     applyMove(id, status);
   }
 
+  function submitIngest(draft: IngestEmailDraft) {
+    const snapshot = local;
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const max = local
+      .filter((item) => item.status === "inbox")
+      .reduce((m, item) => Math.max(m, item.sort_order), 0);
+    const optimistic: OpsBoardItem = {
+      id: tempId,
+      title: draft.title.trim(),
+      status: "inbox",
+      owner: draft.owner || null,
+      next_action: draft.next_action.trim() || null,
+      due_on: draft.due_on || null,
+      source: draft.subject.trim() ? `email: ${draft.subject.trim()}` : null,
+      notes: null,
+      sort_order: max + 1,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setLocal((prev) => [...prev, optimistic]);
+    setIngesting(false);
+    setError("");
+    setNotice("");
+    start(async () => {
+      const res = await ingestOpsBoardEmail(draft);
+      if (!res.ok) {
+        setLocal(snapshot);
+        setIngesting(true);
+        setError(res.error);
+      } else if (res.duplicate) {
+        setLocal(snapshot);
+        setNotice("That email is already on the board.");
+      }
+      router.refresh();
+    });
+  }
+
   return (
     <>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
           {pending ? "Saving…" : "Drag a card, or use Move to. Inbox clears the owner."}
         </p>
-        <Button
-          onClick={() => {
-            setCreateSeed(EMPTY_DRAFT);
-            setCreateKey((key) => key + 1);
-            setCreating(true);
-          }}
-        >
-          + New card
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setError("");
+              setNotice("");
+              setIngestKey((key) => key + 1);
+              setIngesting(true);
+            }}
+          >
+            Ingest email
+          </Button>
+          <Button
+            onClick={() => {
+              setCreateSeed(EMPTY_DRAFT);
+              setCreateKey((key) => key + 1);
+              setCreating(true);
+            }}
+          >
+            + New card
+          </Button>
+        </div>
       </div>
+      {notice ? <p className="mt-3 text-sm text-muted">{notice}</p> : null}
       {error ? (
         <div className="mt-3">
           <ErrorText>{error}</ErrorText>
         </div>
+      ) : null}
+
+      {ingestEvents.length > 0 ? (
+        <RecentIngest
+          events={ingestEvents}
+          items={local}
+          onOpen={(id) => {
+            const item = local.find((card) => card.id === id);
+            if (item) setEditing(item);
+          }}
+        />
       ) : null}
 
       <div className="mt-4 flex gap-4 overflow-x-auto pb-4">
@@ -185,6 +260,15 @@ export function OpsBoard({ items }: { items: OpsBoardItem[] }) {
           );
         })}
       </div>
+
+      <IngestEmailModal
+        key={`ingest-${ingestKey}`}
+        open={ingesting}
+        pending={pending}
+        serverError={error}
+        onClose={() => setIngesting(false)}
+        onSubmit={(draft) => submitIngest(draft)}
+      />
 
       <CardModal
         key={`new-${createKey}`}
@@ -306,6 +390,48 @@ export function OpsBoard({ items }: { items: OpsBoardItem[] }) {
         }
       />
     </>
+  );
+}
+
+function RecentIngest({
+  events,
+  items,
+  onOpen,
+}: {
+  events: OpsBoardIngestEvent[];
+  items: OpsBoardItem[];
+  onOpen: (cardId: string) => void;
+}) {
+  const onBoard = new Set(items.map((item) => item.id));
+  return (
+    <div className="mt-4 rounded-2xl border border-line bg-white px-4 py-3">
+      <p className="text-xs font-semibold text-muted">Recent ingest</p>
+      <ul className="mt-2 flex flex-col gap-1.5">
+        {events.map((event) => {
+          const label = event.subject || event.from_addr || event.external_key;
+          const cardId = event.card_id;
+          const canOpen = cardId !== null && onBoard.has(cardId);
+          return (
+            <li key={event.id} className="flex items-center justify-between gap-3 text-sm">
+              {canOpen && cardId ? (
+                <button
+                  type="button"
+                  onClick={() => onOpen(cardId)}
+                  className="min-w-0 truncate text-left font-medium text-brand-700 hover:underline"
+                >
+                  {label}
+                </button>
+              ) : (
+                <span className="min-w-0 truncate text-ink">{label}</span>
+              )}
+              <Badge tone={event.status === "created" ? "green" : event.status === "error" ? "red" : "neutral"}>
+                {event.status}
+              </Badge>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

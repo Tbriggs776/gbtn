@@ -41,6 +41,23 @@ export type OpsBoardItem = {
 
 export type OpsBoardResult = { ok: true } | { ok: false; error: string };
 
+export type OpsBoardIngestStatus = "created" | "skipped" | "error";
+
+export type OpsBoardIngestEvent = {
+  id: string;
+  external_key: string;
+  from_addr: string | null;
+  subject: string | null;
+  status: OpsBoardIngestStatus;
+  card_id: string | null;
+  error: string | null;
+  created_at: string;
+};
+
+export function isOpsBoardIngestStatus(v: unknown): v is OpsBoardIngestStatus {
+  return v === "created" || v === "skipped" || v === "error";
+}
+
 export function isOpsBoardStatus(v: unknown): v is OpsBoardStatus {
   return typeof v === "string" && (OPS_BOARD_STATUSES as readonly string[]).includes(v);
 }
@@ -110,5 +127,22 @@ export function parseOpsBoardItem(row: unknown): OpsBoardItem | null {
     completed_at: typeof r.completed_at === "string" ? r.completed_at : null,
     created_at: r.created_at,
     updated_at: r.updated_at,
+  };
+}
+
+export function parseOpsBoardIngestEvent(row: unknown): OpsBoardIngestEvent | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.external_key !== "string") return null;
+  if (!isOpsBoardIngestStatus(r.status) || typeof r.created_at !== "string") return null;
+  return {
+    id: r.id,
+    external_key: r.external_key,
+    from_addr: typeof r.from_addr === "string" && r.from_addr.trim() ? r.from_addr : null,
+    subject: typeof r.subject === "string" && r.subject.trim() ? r.subject : null,
+    status: r.status,
+    card_id: typeof r.card_id === "string" ? r.card_id : null,
+    error: typeof r.error === "string" && r.error.trim() ? r.error : null,
+    created_at: r.created_at,
   };
 }
