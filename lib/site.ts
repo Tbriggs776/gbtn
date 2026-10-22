@@ -42,6 +42,7 @@ export const nav = [
   { label: "About", href: "/about" },
   { label: "Services", href: "/services" },
   { label: "Results", href: "/results" },
+  { label: "FAQ", href: "/faq" },
   { label: "Contact", href: "/contact" },
 ] as const;
 
@@ -335,3 +336,58 @@ export const podcast = {
   blurb:
     "Straight-talk finance for operators: how to read your numbers and use them to run a better business.",
 } as const;
+
+// ── FAQ ─────────────────────────────────────────────────────────────────────
+// Rendered on /faq and emitted as FAQPage structured data, so AI assistants
+// and search engines can quote these answers directly. Keep every answer
+// factual and consistent with the copy above; no pricing figures.
+export const faqs = [
+  {
+    q: "What is a fractional CFO?",
+    a: "A fractional CFO is an experienced chief financial officer who works with your company part time or on a defined engagement, instead of as a full-time hire. You get CFO-level forecasting, reporting, cash management, and strategic guidance at a fraction of the cost of a full-time executive.",
+  },
+  {
+    q: "What does Growth by the Numbers do?",
+    a: "Growth by the Numbers is a fractional CFO and scale-consulting firm. We install the financial operating system (financial ops, metrics, and a weekly cadence) for operator-led companies so they grow on evidence instead of gut. Engagements run from a fast margin and cash diagnostic to a full investor-grade finance stack for PE-backed platforms.",
+  },
+  {
+    q: "Who leads Growth by the Numbers?",
+    a: "The firm is led by founder Tyler Briggs, who served as President & CFO of Semper Fi Heating & Cooling, a Pulte Capital-backed home services platform, and scaled it from about $30M to $100M+ in revenue in three years with 18% annualized EBITDA growth. He has 12+ years inside PE-backed and founder-led companies and has led 20+ M&A deals from diligence through integration.",
+  },
+  {
+    q: "What kinds of companies do you work with?",
+    a: "Two related audiences. Founder-led operators with roughly $5M to $150M in revenue, especially home and field services (HVAC, plumbing, electrical, roofing, landscaping) and multi-location businesses. And PE-backed platforms, where sponsors and portfolio CEOs need investor-grade reporting, covenant-ready cash, and repeatable value-creation workstreams across a roll-up.",
+  },
+  {
+    q: "When should a company hire a fractional CFO?",
+    a: "Common signals: revenue is growing but profit and cash are not keeping up, you cannot see margin by job, branch, or crew, month-end numbers arrive too late to act on, you are preparing to raise capital, take on debt, acquire, or sell, or a PE sponsor or lender is asking for reporting your team cannot yet produce.",
+  },
+  {
+    q: "Do you work with home services and HVAC companies?",
+    a: "Yes. Home services is where Tyler Briggs scaled a PE-backed HVAC platform past $100M, and the firm works with HVAC, plumbing, electrical, roofing, and landscaping operators on job profitability, pricing and gross margin, labor productivity, cash forecasting, and acquisition integration.",
+  },
+  {
+    q: "How does an engagement start?",
+    a: "Most clients start with Profit by the Numbers, a 2 to 4 week diagnostic that delivers a margin bridge, a 13-week cash forecast baseline, a KPI scorecard against seven core metrics, and a prioritized top-10 action plan. From there, Scale by the Numbers installs the budget, forecast, and weekly KPI cadence, and Institutional-Grade Scale builds board reporting, controls, systems, and M&A readiness.",
+  },
+  {
+    q: "How much does a fractional CFO from Growth by the Numbers cost?",
+    a: "Pricing is scoped in a consultation based on your stage, complexity, and goals rather than published as a rate card. Engagements are productized, so you agree on deliverables and timing up front, and most clients begin with the fixed-scope diagnostic.",
+  },
+  {
+    q: "Do you help PE-backed companies prepare for an exit or recap?",
+    a: "Yes. Institutional-Grade Scale is built for PE-backed platforms preparing for a recap, add-ons, or an exit: board and IC reporting with KPI bridges, controls and an approval matrix, ERP and BI build leadership, M&A diligence with a 30/60/90 integration playbook, and lender-ready covenant reporting.",
+  },
+  {
+    q: "What metrics do you focus on?",
+    a: "Seven metrics that run an operating business: revenue growth rate, gross margin %, EBITDA margin %, billable utilization %, revenue per employee, customer concentration %, and cash conversion cycle. They map to three levers of value: revenue growth, margin expansion, and team leverage.",
+  },
+  {
+    q: "Where are you located?",
+    a: "Growth by the Numbers is based in Arizona and works with clients remotely nationwide across the United States.",
+  },
+  {
+    q: "Which accounting and operating systems do you work with?",
+    a: "QuickBooks (Tyler Briggs is a QuickBooks ProAdvisor), NetSuite, Sage Intacct, Microsoft Dynamics GP, ServiceTitan, HouseCall Pro, Power BI, Tableau, and Yardi Voyager.",
+  },
+] as const;

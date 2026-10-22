@@ -9,7 +9,9 @@ import {
   SectionHeading,
 } from "@/components/ui";
 import { ProcessSteps, CtaBand } from "@/components/sections";
+import { JsonLd } from "@/components/json-ld";
 import { services, addOns, audiences } from "@/lib/site";
+import { servicesGraph } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
   title: "Services",
@@ -20,6 +22,7 @@ export const metadata: Metadata = {
 export default function ServicesPage() {
   return (
     <>
+      <JsonLd data={servicesGraph()} />
       {/* ── Hero ── */}
       <section className="relative overflow-hidden bg-ink">
         <div className="absolute inset-0 grid-texture opacity-50" />
