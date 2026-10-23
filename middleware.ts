@@ -13,10 +13,13 @@ export function middleware(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 
-  // CRM lives behind the staff (team) door; the rest of the portal behind the
-  // client door. The authoritative role check still runs server-side in the
-  // layouts — this just picks the friendlier login to land on.
-  const loginPath = pathname.startsWith("/portal/crm") ? "/team" : "/login";
+  // CRM and the Ops Board live behind the staff (team) door; the rest of the
+  // portal behind the client door. The authoritative role check still runs
+  // server-side in the layouts — this just picks the friendlier login to land on.
+  const loginPath =
+    pathname.startsWith("/portal/crm") || pathname.startsWith("/portal/ops-board")
+      ? "/team"
+      : "/login";
 
   if (!configured) {
     const url = request.nextUrl.clone();
