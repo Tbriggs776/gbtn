@@ -26,6 +26,7 @@ const PL_MAP: Record<string, string> = {
   "freight in": "cogs",
   "referral fees": "cogs",
   "claims (house/installer/material)": "cogs",
+  "warranty reserve": "cogs",
   "advertising & marketing": "opex",
   "payroll expense": "opex",
   "office & software": "opex",
@@ -104,7 +105,7 @@ function categorize(type: StatementType, label: string): string | null {
   return guess === "exclude" ? null : guess;
 }
 
-type Parsed = { colMonth: Map<number, string>; rows: unknown[][] };
+type Parsed = { colMonth: Map<number, string>; labelCol: number; rows: unknown[][] };
 function parseSheet(ws: XLSX.WorkSheet | undefined): Parsed | null {
   if (!ws) return null;
   const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, {
@@ -120,14 +121,26 @@ function parseSheet(ws: XLSX.WorkSheet | undefined): Parsed | null {
     if (hits > best) { best = hits; headerIdx = i; }
   });
   if (headerIdx < 0) return null;
+  const header = aoa[headerIdx] as unknown[];
   const colMonth = new Map<number, string>();
-  (aoa[headerIdx] as unknown[]).forEach((c, col) => {
+  header.forEach((c, col) => {
     if (typeof c === "string") {
       const key = c.trim().slice(0, 3).toLowerCase();
       if (MONTHS[key]) colMonth.set(col, key);
     }
   });
-  return { colMonth, rows: aoa.slice(headerIdx + 1) as unknown[][] };
+  // Line-item labels aren't always in column A. The "Segmented" MRP variant
+  // prefixes a blank column, pushing labels to column B (and the balance sheet
+  // carries a "Year Open" column between the label and January). Anchor on the
+  // "Line item" header; fall back to the column just left of the first month.
+  let labelCol = header.findIndex(
+    (c) => typeof c === "string" && c.trim().toLowerCase() === "line item"
+  );
+  if (labelCol < 0) {
+    const firstMonthCol = Math.min(...colMonth.keys());
+    labelCol = Math.max(0, firstMonthCol - 1);
+  }
+  return { colMonth, labelCol, rows: aoa.slice(headerIdx + 1) as unknown[][] };
 }
 
 function itemsForMonth(
@@ -135,7 +148,7 @@ function itemsForMonth(
 ): MrpItem[] {
   const out: MrpItem[] = [];
   for (const row of parsed.rows) {
-    const label = row[0];
+    const label = row[parsed.labelCol];
     if (label == null || String(label).trim() === "") continue;
     const cat = categorize(type, String(label));
     if (!cat) continue;
